@@ -1,83 +1,238 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class STTClient : MonoBehaviour
+public class AutoVADSTTClient : MonoBehaviour
 {
+	[Header("AI")]
+	public OllamaClient ollama;
+
     [Header("STT Server")]
     public string sttUrl = "http://127.0.0.1:8007/stt";
 
-    [Header("Recording")]
-    public int recordSeconds = 4;
+    [Header("Microphone")]
+    public int selectedMicIndex = 0;
     public int sampleRate = 16000;
-    public KeyCode pushToTalkKey = KeyCode.R;
+
+    [Header("VAD (Voice Activity Detection)")]
+    [Tooltip("RMS threshold above which we consider the user is speaking.")]
+    public float startThreshold = 0.02f;
+
+    [Tooltip("If RMS stays below threshold for this duration, we stop recording + send.")]
+    public float stopAfterSilenceSeconds = 2.0f;
+
+    [Tooltip("Audio kept before speech starts so you don't miss first word.")]
+    public float preRollSeconds = 0.35f;
+
+    [Tooltip("Hard cap so you don't record forever.")]
+    public float maxSpeechSeconds = 20f;
+
+	[Header("Flow Control")]
+	public bool canTalkAgain = true;
+
+    [Header("Debug")]
+    public bool showDebugLogs = true;
+    public bool showOnScreenStatus = true;
 
     private string micDevice;
-    private bool isRecording;
-    private AudioClip clip;
+    private AudioClip micClip;
+
+    private const int MIC_BUFFER_SECONDS = 60; // mic recording ring buffer length
+    private int lastMicPos = 0;
+
+    private bool isSpeaking = false;
+    private float silenceTimer = 0f;
+    private float speakingTimer = 0f;
+
+    private float lastRms = 0f;
+
+    // Rolling pre-roll buffer
+    private Queue<float> preRollQueue = new();
+    private int preRollSamplesMax;
+
+    // Current utterance buffer
+    private List<float> utterance = new();
 
     [Serializable]
     public class STTResponse
     {
         public string text;
         public string lang;
+        public float time_sec;
+        public string model;
+        public string device;
     }
 
     void Start()
     {
         if (Microphone.devices.Length == 0)
         {
-            Debug.LogError("No microphone detected.");
+            Debug.LogError("No microphone devices found.");
+            enabled = false;
             return;
         }
 
-        micDevice = Microphone.devices[0];
-        Debug.Log("Mic selected: " + micDevice);
-        Debug.Log($"Press [{pushToTalkKey}] to record {recordSeconds}s and transcribe.");
+        selectedMicIndex = Mathf.Clamp(selectedMicIndex, 0, Microphone.devices.Length - 1);
+        micDevice = Microphone.devices[selectedMicIndex];
+
+        preRollSamplesMax = Mathf.CeilToInt(preRollSeconds * sampleRate);
+
+        StartMic();
+
+        if (showDebugLogs)
+        {
+            Debug.Log($"[AutoVAD] Mic = {micDevice}");
+            Debug.Log("[AutoVAD] Listening...");
+        }
+    }
+
+    void OnDisable()
+    {
+        StopMic();
+    }
+
+    void StartMic()
+    {
+        micClip = Microphone.Start(micDevice, true, MIC_BUFFER_SECONDS, sampleRate);
+        lastMicPos = 0;
+    }
+
+    void StopMic()
+    {
+        if (!string.IsNullOrEmpty(micDevice))
+            Microphone.End(micDevice);
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(pushToTalkKey) && !isRecording)
+        if (micClip == null) return;
+
+        int micPos = Microphone.GetPosition(micDevice);
+        if (micPos < 0 || micPos == lastMicPos) return;
+
+        // Handle wrap-around (ring buffer)
+        int samplesToRead = micPos - lastMicPos;
+        if (samplesToRead < 0)
+            samplesToRead += micClip.samples;
+
+        if (samplesToRead <= 0) return;
+
+        float[] chunk = new float[samplesToRead];
+        micClip.GetData(chunk, lastMicPos);
+
+        lastMicPos = micPos;
+
+        // Convert this chunk to actual time length (THIS is key)
+        float chunkSeconds = (float)samplesToRead / sampleRate;
+
+        // Compute RMS volume of this chunk
+        float rms = ComputeRMS(chunk);
+        lastRms = rms;
+
+        // Always feed pre-roll buffer
+        PushPreRoll(chunk);
+
+        // Speech state machine
+        if (!isSpeaking)
         {
-            StartCoroutine(RecordThenTranscribe());
+            // Start speaking when we cross threshold
+            if (canTalkAgain && rms >= startThreshold)
+            {
+                isSpeaking = true;
+                silenceTimer = 0f;
+                speakingTimer = 0f;
+
+                utterance.Clear();
+
+                // Pre-roll so we don't miss first word
+                utterance.AddRange(preRollQueue);
+
+                // Add current chunk
+                utterance.AddRange(chunk);
+
+                if (showDebugLogs)
+                    Debug.Log($"[AutoVAD] 🎤 Speech START (rms={rms:0.0000})");
+            }
+        }
+        else
+        {
+            // IMPORTANT: speakingTimer must use AUDIO TIME, not deltaTime
+            speakingTimer += chunkSeconds;
+
+            // Always record while speaking
+            utterance.AddRange(chunk);
+
+            // Silence logic: use a lower threshold so muting / quiet counts as silence
+            float silenceThreshold = startThreshold * 0.5f;
+
+            if (rms < silenceThreshold)
+            {
+                // IMPORTANT: silenceTimer must use AUDIO TIME
+                silenceTimer += chunkSeconds;
+
+                if (silenceTimer >= stopAfterSilenceSeconds)
+                {
+                    if (showDebugLogs)
+                        Debug.Log($"[AutoVAD] 🛑 Speech STOP (silence {silenceTimer:0.00}s)");
+
+                    isSpeaking = false;
+                    silenceTimer = 0f;
+
+                    FinalizeAndSendUtterance();
+                }
+            }
+            else
+            {
+                silenceTimer = 0f;
+            }
+
+            // Safety max cap (also based on AUDIO TIME)
+            if (speakingTimer >= maxSpeechSeconds)
+            {
+                if (showDebugLogs)
+                    Debug.Log("[AutoVAD] 🛑 Speech STOP (maxSpeechSeconds reached)");
+
+                isSpeaking = false;
+                silenceTimer = 0f;
+
+                FinalizeAndSendUtterance();
+            }
         }
     }
 
-    IEnumerator RecordThenTranscribe()
+    void FinalizeAndSendUtterance()
     {
-        isRecording = true;
+        // reset speaking timer now
+        speakingTimer = 0f;
 
-        Debug.Log("Recording...");
-        clip = Microphone.Start(micDevice, false, recordSeconds, sampleRate);
-
-        // wait until the mic actually starts
-        while (Microphone.GetPosition(micDevice) <= 0)
-            yield return null;
-
-        yield return new WaitForSeconds(recordSeconds);
-
-        Microphone.End(micDevice);
-        Debug.Log("Recording stopped.");
-
-        if (clip == null)
+        if (utterance.Count <= sampleRate / 4)
         {
-            Debug.LogError("Clip is null.");
-            isRecording = false;
-            yield break;
+            if (showDebugLogs) Debug.Log("[AutoVAD] Utterance too short, ignoring.");
+            utterance.Clear();
+            return;
         }
 
-        // Convert AudioClip -> WAV bytes
-        byte[] wav = WavUtility.FromAudioClip(clip);
+        // Create AudioClip from float buffer
+        var clip = AudioClip.Create(
+            "utterance",
+            utterance.Count,
+            1,
+            sampleRate,
+            false
+        );
 
-        // Send to STT server
-        yield return StartCoroutine(SendWav(wav));
+        clip.SetData(utterance.ToArray(), 0);
 
-        isRecording = false;
+        // Convert to WAV bytes and send
+        byte[] wavBytes = WavUtility.FromAudioClip(clip);
+        StartCoroutine(SendWavToSTT(wavBytes));
+
+        utterance.Clear();
     }
 
-    IEnumerator SendWav(byte[] wavBytes)
+    IEnumerator SendWavToSTT(byte[] wavBytes)
     {
         WWWForm form = new WWWForm();
         form.AddBinaryData("audio", wavBytes, "audio.wav", "audio/wav");
@@ -85,21 +240,63 @@ public class STTClient : MonoBehaviour
         using UnityWebRequest req = UnityWebRequest.Post(sttUrl, form);
         req.timeout = 120;
 
-        Debug.Log("Sending audio to STT...");
+        if (showDebugLogs) Debug.Log("[AutoVAD] Sending audio to STT...");
         yield return req.SendWebRequest();
 
         if (req.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError("STT request failed: " + req.error);
-            Debug.LogError("Server says: " + req.downloadHandler.text);
+            Debug.LogError("[AutoVAD] STT request failed: " + req.error);
+            Debug.LogError("[AutoVAD] Server says: " + req.downloadHandler.text);
             yield break;
         }
 
         string json = req.downloadHandler.text;
-        Debug.Log("Raw STT JSON: " + json);
+        if (showDebugLogs) Debug.Log("[AutoVAD] Raw STT JSON: " + json);
 
         STTResponse res = JsonUtility.FromJson<STTResponse>(json);
-        Debug.Log($"✅ TEXT: {res.text}");
+
+        Debug.Log($"✅ STT TEXT: {res.text}");
         Debug.Log($"🌐 LANG: {res.lang}");
+
+		if (ollama != null && !string.IsNullOrWhiteSpace(res.text))
+		{
+    		canTalkAgain = false;     // 🔒 lock
+    		ollama.Ask(res.text);
+		}
+    }
+
+    float ComputeRMS(float[] samples)
+    {
+        double sum = 0;
+        for (int i = 0; i < samples.Length; i++)
+        {
+            float s = samples[i];
+            sum += s * s;
+        }
+        return (float)Math.Sqrt(sum / samples.Length);
+    }
+
+    void PushPreRoll(float[] chunk)
+    {
+        for (int i = 0; i < chunk.Length; i++)
+        {
+            preRollQueue.Enqueue(chunk[i]);
+            while (preRollQueue.Count > preRollSamplesMax)
+                preRollQueue.Dequeue();
+        }
+    }
+
+    void OnGUI()
+    {
+        if (!showOnScreenStatus || !Application.isPlaying) return;
+
+        GUILayout.BeginArea(new Rect(10, 10, 520, 260), GUI.skin.box);
+        GUILayout.Label("AutoVAD STT");
+        GUILayout.Label("Mic: " + micDevice);
+        GUILayout.Label("Status: " + (isSpeaking ? "🎤 speaking" : "listening..."));
+        GUILayout.Label($"RMS: {lastRms:0.0000}");
+		GUILayout.Label($"canTalkAgain: {(canTalkAgain ? "✅ TRUE" : "⛔ FALSE (waiting AI)")}");
+        GUILayout.Label($"Threshold: {startThreshold:0.0000} | SilenceStop: {stopAfterSilenceSeconds:0.0}s | PreRoll: {preRollSeconds:0.00}s");
+        GUILayout.EndArea();
     }
 }
