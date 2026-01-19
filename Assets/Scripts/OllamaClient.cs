@@ -407,6 +407,50 @@ MEMORY JSON:
 
         int happy = 0, sad = 0, angry = 0, surprised = 0;
 
+        // Extract and analyze action keywords between asterisks
+        var actionMatches = System.Text.RegularExpressions.Regex.Matches(text, @"\*([^*]+)\*");
+        foreach (System.Text.RegularExpressions.Match match in actionMatches)
+        {
+            string action = match.Groups[1].Value.ToLowerInvariant().Trim();
+            
+            // Happy actions
+            if (action.Contains("wink") || action.Contains("smile") || action.Contains("grin") || 
+                action.Contains("giggle") || action.Contains("laugh") || action.Contains("chuckle") ||
+                action.Contains("beam") || action.Contains("bounce") || action.Contains("dance") ||
+                action.Contains("hug") || action.Contains("kiss") || action.Contains("cuddle") ||
+                action.Contains("nod") && action.Contains("excitedly"))
+            {
+                happy += 4;
+            }
+            
+            // Sad actions
+            else if (action.Contains("sigh") || action.Contains("frown") || action.Contains("tear") ||
+                     action.Contains("cry") || action.Contains("sob") || action.Contains("droop") ||
+                     action.Contains("slump") || action.Contains("mope") || action.Contains("whimper") ||
+                     action.Contains("look down") || action.Contains("lower head"))
+            {
+                sad += 4;
+            }
+            
+            // Angry actions  
+            else if (action.Contains("glare") || action.Contains("scowl") || action.Contains("growl") ||
+                     action.Contains("huff") || action.Contains("stomp") || action.Contains("clench") ||
+                     action.Contains("cross arms") || action.Contains("roll eyes") || action.Contains("snap") ||
+                     action.Contains("slam") || action.Contains("march"))
+            {
+                angry += 4;
+            }
+            
+            // Surprised actions
+            else if (action.Contains("gasp") || action.Contains("blink") || action.Contains("stare") ||
+                     action.Contains("jump") || action.Contains("startle") || action.Contains("wide eyes") ||
+                     action.Contains("raise eyebrow") || action.Contains("tilt head") || 
+                     action.Contains("lean forward") || action.Contains("look surprised"))
+            {
+                surprised += 4;
+            }
+        }
+
         int exclamations = 0;
         int questions = 0;
         foreach (char c in raw)
