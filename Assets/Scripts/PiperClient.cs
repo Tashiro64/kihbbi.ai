@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -62,9 +63,6 @@ public class PiperClient : MonoBehaviour
             audioSource.loop = false;
             audioSource.spatialBlend = 0f; // 2D sound
             audioSource.volume = Mathf.Max(audioSource.volume, 0.7f);
-            
-            if (debugLogs)
-                Debug.Log($"[Piper] AudioSource configured: volume={audioSource.volume}");
         }
 
         if (ollama == null)
@@ -135,9 +133,6 @@ public class PiperClient : MonoBehaviour
             };
 
             pendingGeneration.Enqueue(item);
-            
-            if (debugLogs)
-                Debug.Log($"[Piper] Enqueued #{item.seq}: {chunk}");
         }
 
         TryStartGenerators();
@@ -162,12 +157,8 @@ public class PiperClient : MonoBehaviour
         {
             byte[] wavBytes = await PostTTSAsync(item.text);
 
-            if (debugLogs)
-                Debug.Log($"[Piper] Received {wavBytes?.Length ?? 0} bytes for seq {item.seq}");
-
             if (wavBytes == null || wavBytes.Length < 44)
             {
-                if (debugLogs) Debug.LogWarning($"[Piper] Invalid WAV for seq {item.seq}");
                 return;
             }
 
@@ -175,25 +166,16 @@ public class PiperClient : MonoBehaviour
 
             if (clip == null)
             {
-                if (debugLogs) Debug.LogWarning($"[Piper] WAV decode failed for seq {item.seq}");
                 return;
             }
-
-            if (debugLogs)
-                Debug.Log($"[Piper] Created AudioClip for seq {item.seq}: length={clip.length:F2}s, samples={clip.samples}");
 
             UnityMainThread(() =>
             {
                 generatedClips[item.seq] = clip;
                 FlushReadyClips();
                 
-                if (debugLogs)
-                    Debug.Log($"[Piper] Stored clip #{item.seq}, readyToPlayQueue has {readyToPlayQueue.Count} clips");
-                
                 if (!isPlaying && readyToPlayQueue.Count > 0)
                 {
-                    if (debugLogs)
-                        Debug.Log("[Piper] Starting playback");
                     StartCoroutine(PlayQueueCoroutine());
                 }
             });
@@ -213,27 +195,18 @@ public class PiperClient : MonoBehaviour
     }
 
     private void FlushReadyClips()
-    {
-        if (debugLogs)
-            Debug.Log($"[Piper] FlushReadyClips: looking for seq {nextPlaySeq}, available: {string.Join(", ", generatedClips.Keys)}");
-            
+    {            
         while (generatedClips.TryGetValue(nextPlaySeq, out AudioClip clip))
         {
             generatedClips.Remove(nextPlaySeq);
             readyToPlayQueue.Enqueue(clip);
-            
-            if (debugLogs)
-                Debug.Log($"[Piper] Clip #{nextPlaySeq} ready for playback");
             
             nextPlaySeq++;
         }
     }
 
     private System.Collections.IEnumerator PlayQueueCoroutine()
-    {
-        if (debugLogs)
-            Debug.Log($"[Piper] PlayQueueCoroutine started, queue has {readyToPlayQueue.Count} clips");
-            
+    {            
         isPlaying = true;
 
         while (readyToPlayQueue.Count > 0)
@@ -241,8 +214,6 @@ public class PiperClient : MonoBehaviour
             AudioClip clip = readyToPlayQueue.Dequeue();
             if (clip == null) 
             {
-                if (debugLogs)
-                    Debug.LogWarning("[Piper] Found null clip in queue");
                 continue;
             }
 
@@ -252,14 +223,8 @@ public class PiperClient : MonoBehaviour
                 break;
             }
 
-            if (debugLogs)
-                Debug.Log($"[Piper] Playing clip: {clip.name}, length={clip.length:F2}s");
-
             audioSource.clip = clip;
             audioSource.Play();
-
-            if (debugLogs)
-                Debug.Log($"[Piper] AudioSource.Play() called, isPlaying={audioSource.isPlaying}");
 
             // Wait until done playing
             float startTime = Time.time;
@@ -267,37 +232,51 @@ public class PiperClient : MonoBehaviour
             
             while (audioSource.isPlaying && (Time.time - startTime) < timeout)
                 yield return new WaitForSeconds(0.1f);
-            
-            if (debugLogs)
-                Debug.Log($"[Piper] Clip finished playing");
         }
 
         isPlaying = false;
         
-        if (debugLogs)
-            Debug.Log($"[Piper] PlayQueueCoroutine finished. Pending: {pendingGeneration.Count}, Generated: {generatedClips.Count}");
-
         // Reset when everything is done
         if (pendingGeneration.Count == 0 && generatedClips.Count == 0)
         {
             seqCounter = 0;
             nextPlaySeq = 1;
-            if (debugLogs)
-                Debug.Log("[Piper] Sequence counters reset");
         }
         else if (pendingGeneration.Count > 0)
         {
-            if (debugLogs)
-                Debug.Log("[Piper] More items pending, restarting generators");
             TryStartGenerators();
         }
     }
 
+    private string CleanTextForTTS(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+        
+        // Remove action/emotion annotations between asterisks
+        string cleaned = Regex.Replace(text, @"\*[^*]*\*", "");
+        
+        // Clean up extra whitespace
+        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        
+        return cleaned;
+    }
+
     private async Task<byte[]> PostTTSAsync(string text)
     {
+        // Clean text to remove action/emotion annotations like *winks*
+        string cleanedText = CleanTextForTTS(text);
+        
+        if (string.IsNullOrWhiteSpace(cleanedText))
+        {
+            if (debugLogs)
+                Debug.LogWarning($"[Piper] Text became empty after cleaning: '{text}'");
+            return null;
+        }
+        
         PiperRequest payload = new PiperRequest
         {
-            text = text,
+            text = cleanedText,
             language = "en", // For compatibility
             speaker_wav = null, // Not used by Piper
             speaker = null, // For compatibility
@@ -306,9 +285,6 @@ public class PiperClient : MonoBehaviour
         };
 
         string json = JsonUtility.ToJson(payload);
-
-        if (debugLogs)
-            Debug.Log($"[Piper] POST {ttsUrl} | text_len={text.Length} | speaker_id={speakerId} | speech_rate={speechRate}");
 
         using (UnityWebRequest req = new UnityWebRequest(ttsUrl, "POST"))
         {

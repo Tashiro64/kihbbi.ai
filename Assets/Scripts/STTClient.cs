@@ -70,7 +70,6 @@ public class AutoVADSTTClient : MonoBehaviour
 
     void Awake()
     {
-        Debug.Log("[AutoVADSTTClient] Awake instance id = " + GetInstanceID());
     }
 
     void Start()
@@ -88,12 +87,6 @@ public class AutoVADSTTClient : MonoBehaviour
         preRollSamplesMax = Mathf.CeilToInt(preRollSeconds * sampleRate);
 
         StartMic();
-
-        if (showDebugLogs)
-        {
-            Debug.Log($"[AutoVAD] Mic = {micDevice}");
-            Debug.Log("[AutoVAD] Listening...");
-        }
     }
 
     void OnDisable()

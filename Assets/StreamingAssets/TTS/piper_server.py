@@ -41,24 +41,20 @@ try:
     onnx_files = list(Path(BASE_DIR).glob("*.onnx"))
     if onnx_files:
         model_path = str(onnx_files[0])  # Convert to string for better compatibility
-        print(f"Found model file: {model_path}")
         
         # Try loading with explicit encoding handling
         try:
             voice = PiperVoice.load(model_path)
         except UnicodeEncodeError as enc_error:
-            print(f"Encoding error with path: {enc_error}")
             # Try with different path handling
             model_path_short = os.path.basename(model_path)
-            print(f"Trying with short path: {model_path_short}")
             # Change to the directory and use relative path
             original_dir = os.getcwd()
             os.chdir(BASE_DIR)
             try:
                 voice = PiperVoice.load(model_path_short)
-                print("Successfully loaded with short path")
             except Exception as e2:
-                print(f"Short path also failed: {e2}")
+                print(f"Model loading failed: {e2}")
             finally:
                 os.chdir(original_dir)
     else:
@@ -74,33 +70,18 @@ try:
         config_path = os.path.join(BASE_DIR, "en_US-libritts_r-medium.onnx.json")
         
         # Download model files
-        print("Downloading model file...")
         urllib.request.urlretrieve(model_url, model_path)
-        print("Downloading config file...")  
         urllib.request.urlretrieve(config_url, config_path)
-        
-        print(f"Downloaded model to: {model_path}")
-        print(f"Config file at: {config_path}")
-        
-        # Verify files exist and are not empty
-        if os.path.exists(model_path):
-            print(f"Model file size: {os.path.getsize(model_path)} bytes")
-        if os.path.exists(config_path):
-            print(f"Config file size: {os.path.getsize(config_path)} bytes")
         
         # Change to the directory to avoid path encoding issues
         original_dir = os.getcwd()
         os.chdir(BASE_DIR)
         try:
             voice = PiperVoice.load("en_US-libritts_r-medium.onnx")  # Use relative path
-            print("Successfully loaded downloaded model")
         except Exception as load_error:
             print(f"Failed to load downloaded model: {load_error}")
         finally:
             os.chdir(original_dir)
-    
-    print(f"Piper voice loaded successfully: {voice}")
-    print(f"Voice attributes: {dir(voice)}")
     
 except Exception as e:
     print(f"Failed to load Piper voice: {e}")
@@ -212,59 +193,69 @@ def tts_endpoint(req: TTSRequest):
         return create_silent_wav(0.1)
     
     try:
-        # Generate audio using Piper
-        print(f"[Piper] Attempting synthesis with voice: {voice}")
-        print(f"[Piper] Voice type: {type(voice)}")
-        print(f"[Piper] Text to synthesize: '{text}'")
-        print(f"[Piper] Using speaker_id: {speaker_id}")
-        print(f"[Piper] Voice methods: {[m for m in dir(voice) if not m.startswith('_')]}")
-        
-        # Method 3: Try manual phoneme approach with speaker support (PRIORITY METHOD)
+        # Try manual phoneme approach with speaker support (PRIORITY METHOD)
         try:
-            print(f"[Piper] Trying manual phoneme synthesis with speaker_id={speaker_id}...")
             
             # Get phonemes from text
             phonemes = voice.phonemize(text)
-            print(f"[Piper] Generated phonemes: {phonemes[:50]}...")  # Show first 50 chars
             
             # Convert phonemes to IDs - handle the list structure properly
             if hasattr(voice, 'phonemes_to_ids'):
+                # Flatten the phonemes list if it's nested (phonemes returns list of lists)
+                if phonemes and isinstance(phonemes[0], list):
+                    flat_phonemes = []
+                    for phoneme_list in phonemes:
+                        flat_phonemes.extend(phoneme_list)
+                    phonemes = flat_phonemes
+                
                 phoneme_ids = voice.phonemes_to_ids(phonemes)
-                print(f"[Piper] Generated {len(phoneme_ids)} phoneme IDs")
                 
                 # Convert phonemes to audio WITH synthesis config
                 try:
                     audio_data = voice.phoneme_ids_to_audio(phoneme_ids, syn_config=syn_config)
-                    print(f"[Piper] Used speaker_id={speaker_id}, length_scale={length_scale} for synthesis")
                 except Exception as config_error:
-                    print(f"[Piper] SynthesisConfig failed: {config_error}, trying basic method")
                     try:
                         audio_data = voice.phoneme_ids_to_audio(phoneme_ids)
-                        print(f"[Piper] Used basic synthesis (no speaker/rate control)")
                     except Exception as basic_error:
-                        print(f"[Piper] Basic synthesis also failed: {basic_error}")
                         audio_data = None
                 
-                if audio_data and len(audio_data) > 0:
+                # Check if audio_data is valid (handle numpy array properly)
+                if audio_data is not None and (hasattr(audio_data, 'size') and audio_data.size > 0 or len(audio_data) > 0):
                     # Convert raw audio to WAV format
+                    import wave as wave_module
+                    import numpy as np
                     audio_buffer = io.BytesIO()
-                    with wave.open(audio_buffer, 'wb') as wav_file:
+                    with wave_module.open(audio_buffer, 'wb') as wav_file:
                         wav_file.setnchannels(1)  # Mono
                         wav_file.setsampwidth(2)  # 16-bit
                         wav_file.setframerate(voice.config.sample_rate)
                         
                         # Ensure audio_data is bytes
-                        if isinstance(audio_data, (list, tuple, tuple)):
+                        if isinstance(audio_data, (list, tuple, np.ndarray)):
                             # Convert numpy array or list to bytes
-                            import numpy as np
                             if hasattr(audio_data, 'dtype'):
-                                # It's already a numpy array
-                                audio_bytes = audio_data.tobytes()
+                                # It's already a numpy array - check its format
+                                if audio_data.dtype == np.float32 or audio_data.dtype == np.float64:
+                                    # Float audio data needs to be converted to int16
+                                    # Clamp to [-1, 1] range first, then convert
+                                    audio_clamped = np.clip(audio_data, -1.0, 1.0)
+                                    audio_int16 = (audio_clamped * 32767).astype(np.int16)
+                                    audio_bytes = audio_int16.tobytes()
+                                elif audio_data.dtype == np.int16:
+                                    # Already int16, use directly
+                                    audio_bytes = audio_data.tobytes()
+                                else:
+                                    # Other format, convert to int16
+                                    audio_float = audio_data.astype(np.float32)
+                                    audio_clamped = np.clip(audio_float, -1.0, 1.0)
+                                    audio_int16 = (audio_clamped * 32767).astype(np.int16)
+                                    audio_bytes = audio_int16.tobytes()
                             else:
                                 # Convert list/tuple to numpy array then bytes
                                 audio_array = np.array(audio_data, dtype=np.float32)
-                                # Normalize and convert to int16
-                                audio_int16 = (audio_array * 32767).astype(np.int16)
+                                # Clamp to [-1, 1] range first
+                                audio_clamped = np.clip(audio_array, -1.0, 1.0)
+                                audio_int16 = (audio_clamped * 32767).astype(np.int16)
                                 audio_bytes = audio_int16.tobytes()
                         else:
                             audio_bytes = audio_data
@@ -272,7 +263,6 @@ def tts_endpoint(req: TTSRequest):
                         wav_file.writeframes(audio_bytes)
                     
                     wav_data = audio_buffer.getvalue()
-                    print(f"[Piper] SUCCESS (manual with speaker): Generated {len(wav_data)} bytes WAV from {len(audio_data)} audio samples")
                     return Response(content=wav_data, media_type="audio/wav")
                 else:
                     print(f"[Piper] Manual method returned {len(audio_data) if audio_data else 0} audio samples")
@@ -295,8 +285,8 @@ def tts_endpoint(req: TTSRequest):
             print(f"[Piper] Writing WAV to: {temp_path}")
             
             # synthesize_wav needs a file opened in WAV mode
-            import wave
-            with wave.open(temp_path, 'wb') as wav_file:
+            import wave as wave_module
+            with wave_module.open(temp_path, 'wb') as wav_file:
                 wav_file.setnchannels(1)  # Mono
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setframerate(voice.config.sample_rate)  # Use voice's sample rate
@@ -307,30 +297,26 @@ def tts_endpoint(req: TTSRequest):
             # Read the generated file
             if os.path.exists(temp_path):
                 file_size = os.path.getsize(temp_path)
-                print(f"[Piper] Generated WAV file size: {file_size} bytes")
                 
                 if file_size > 44:  # Valid WAV file
                     with open(temp_path, "rb") as f:
                         wav_data = f.read()
                     
                     os.unlink(temp_path)  # Clean up
-                    print(f"[Piper] SUCCESS (synthesize_wav fallback): Generated {len(wav_data)} bytes - NO SPEAKER SELECTION")
                     return Response(content=wav_data, media_type="audio/wav")
                 else:
-                    print(f"[Piper] WAV file too small or empty")
                     os.unlink(temp_path)
             
         except Exception as method1_error:
-            print(f"[Piper] synthesize_wav failed: {method1_error}")
-            print(f"[Piper] Error type: {type(method1_error)}")
+            pass
         
         # Method 2: Try basic synthesize to WAV file buffer (no speaker support - LAST RESORT)
         try:
-            print(f"[Piper] Trying synthesize buffer fallback (no speaker selection)...")
             
             # Create WAV file in memory
+            import wave as wave_module
             audio_buffer = io.BytesIO()
-            with wave.open(audio_buffer, 'wb') as wav_file:
+            with wave_module.open(audio_buffer, 'wb') as wav_file:
                 wav_file.setnchannels(1)  # Mono
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setframerate(voice.config.sample_rate)
@@ -339,33 +325,28 @@ def tts_endpoint(req: TTSRequest):
                 voice.synthesize(text, wav_file, syn_config=syn_config)
             
             wav_data = audio_buffer.getvalue()
-            print(f"[Piper] Buffer synthesize result: {len(wav_data)} bytes")
             
             if wav_data and len(wav_data) > 44:
-                print(f"[Piper] SUCCESS (buffer fallback): Generated {len(wav_data)} bytes - NO SPEAKER SELECTION")
                 return Response(content=wav_data, media_type="audio/wav")
                 
         except Exception as method2_error:
-            print(f"[Piper] Buffer synthesize failed: {method2_error}")
-            print(f"[Piper] Error type: {type(method2_error)}")
+            pass
         
         # If all methods fail, return silence
-        print("[Piper] ERROR: All synthesis methods failed - returning silence")
         return create_silent_wav(0.1)
         
     except Exception as e:
-        print(f"[Piper] ERROR: {type(e).__name__}: {e}")
-        print(f"[Piper] Text that caused error: '{text}'")
         return create_silent_wav(0.1)
 
 
 def create_silent_wav(duration_seconds=0.1):
     """Create a silent WAV file of specified duration"""
+    import wave as wave_module
     sample_rate = 22050  # Piper's default sample rate
     samples = int(sample_rate * duration_seconds)
     
     buffer = io.BytesIO()
-    with wave.open(buffer, 'wb') as wav_file:
+    with wave_module.open(buffer, 'wb') as wav_file:
         wav_file.setnchannels(1)  # Mono
         wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(sample_rate)

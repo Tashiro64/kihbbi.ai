@@ -757,7 +757,7 @@ AudioSource:
   m_Resource: {fileID: 0}
   m_PlayOnAwake: 1
   m_Volume: 1
-  m_Pitch: 1
+  m_Pitch: 1.05
   Loop: 0
   Mute: 0
   Spatialize: 0
@@ -869,8 +869,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PiperClient
   ttsUrl: http://127.0.0.1:8011/tts
-  speakerId: 61
-  speechRate: 0.9
+  speakerId: 54
+  speechRate: 1.28
   maxChunkLength: 1000
   maxConcurrentGenerations: 2
   audioSource: {fileID: 1271337599}

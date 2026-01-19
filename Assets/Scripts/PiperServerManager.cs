@@ -34,8 +34,6 @@ public class PiperServerManager : MonoBehaviour
         string folder = Path.Combine(Application.streamingAssetsPath, ttsFolder);
         string serverFile = Path.Combine(folder, serverFileName);
 
-        UnityEngine.Debug.Log($"[Piper] Looking for server at: {serverFile}");
-
         if (!File.Exists(serverFile))
         {
             UnityEngine.Debug.LogError("[Piper] piper_server.py not found: " + serverFile);
@@ -44,9 +42,6 @@ public class PiperServerManager : MonoBehaviour
 
         // Use system python (should have piper-tts installed)
         string pythonExe = "python";
-
-        UnityEngine.Debug.Log($"[Piper] Using Python: {pythonExe}");
-        UnityEngine.Debug.Log($"[Piper] Working directory: {folder}");
 
         proc = new Process();
         proc.StartInfo.FileName = pythonExe;

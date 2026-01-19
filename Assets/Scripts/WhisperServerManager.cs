@@ -47,22 +47,37 @@ public class WhisperServerManager : MonoBehaviour
         proc.OutputDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
-                UnityEngine.Debug.Log("[STT] " + e.Data);
+            {
+                
+                
+                // Set STTReady when server reports it's actually ready
+                if (e.Data.Contains("Application startup complete"))
+                {
+                    STTReady = true;
+                    UnityEngine.Debug.Log("✅ STT server is ready - STTReady = true");
+                }
+            }
         };
 
         proc.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
-                UnityEngine.Debug.Log("[STT] " + e.Data);
+            {
+                
+                // Also check error stream for startup message (some servers log there)
+                if (e.Data.Contains("Application startup complete"))
+                {
+                    STTReady = true;
+                    UnityEngine.Debug.Log("✅ STT server is ready - STTReady = true");
+                }
+            }
         };
 
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
-		STTReady = true;
-
-        UnityEngine.Debug.Log("✅ Whisper server started (python)");
+        UnityEngine.Debug.Log("✅ Whisper server process started");
     }
 
     public void StopServer()

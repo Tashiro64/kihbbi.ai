@@ -96,8 +96,6 @@ public class OllamaClient : MonoBehaviour
         }
         instance = this;
 
-        Debug.Log("[OllamaClient] Awake instance id = " + GetInstanceID());
-
         LoadPersona();
         LoadMemory();
         BuildInitialSystemMessage();
@@ -117,8 +115,6 @@ public class OllamaClient : MonoBehaviour
                 // Prevent its Start() from auto-running anything
                 whisperServerManager.enabled = false;
             }
-
-            Debug.Log("[OllamaClient] Boot mode: Whisper+STT disabled until welcome completes.");
         }
     }
 
@@ -129,7 +125,6 @@ public class OllamaClient : MonoBehaviour
         if (sendWelcomeOnStart && !welcomeSent)
         {
             welcomeSent = true;
-            Debug.Log("[OllamaClient] Sending welcome message...");
             AskInternal(welcomePrompt, lockStt: false, isWelcome: true);
         }
         else
@@ -151,9 +146,6 @@ public class OllamaClient : MonoBehaviour
         }
 
         personaJson = File.ReadAllText(path);
-
-        if (logPersonaLoaded)
-            Debug.Log("[Ollama] persona.json loaded (" + personaJson.Length + " chars)");
     }
 
     void LoadMemory()
@@ -168,9 +160,6 @@ public class OllamaClient : MonoBehaviour
         }
 
         memoryJson = File.ReadAllText(path);
-
-        if (logPersonaLoaded)
-            Debug.Log("[Ollama] memory.json loaded (" + memoryJson.Length + " chars)");
     }
 
     void BuildInitialSystemMessage()
@@ -199,14 +188,11 @@ MEMORY JSON:
             role = "system",
             content = systemPrompt
         });
-
-        Debug.Log("[Ollama] System message initialized.");
     }
 
     public void ResetConversation()
     {
         BuildInitialSystemMessage();
-        Debug.Log("[Ollama] Conversation reset.");
     }
 
     public void Ask(string userText)
@@ -218,7 +204,6 @@ MEMORY JSON:
     {
         if (requestInFlight)
         {
-            Debug.LogWarning("[Ollama] Ask ignored: request already in flight.");
             return;
         }
 
@@ -252,9 +237,6 @@ MEMORY JSON:
 
             string json = JsonUtility.ToJson(reqObj);
 
-            if (logRequests)
-                Debug.Log("[Ollama] Asking: " + userText + $" (payload chars={json.Length})");
-
             using UnityWebRequest req = new UnityWebRequest(ollamaChatUrl, "POST");
             req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
             req.downloadHandler = new DownloadHandlerBuffer();
@@ -273,9 +255,6 @@ MEMORY JSON:
             }
 
             string responseJson = req.downloadHandler.text;
-
-            if (logRawResponse)
-                Debug.Log("[Ollama] Raw: " + responseJson);
 
             OllamaChatResponse o = null;
             try
@@ -322,12 +301,6 @@ MEMORY JSON:
 
             EmitAllSentences(aiText);
 
-            if (logTiming)
-            {
-                float t1 = Time.realtimeSinceStartup;
-                Debug.Log($"[Ollama] Total time: {(t1 - t0):0.000}s");
-            }
-
             OnAIResponse?.Invoke(parsed);
         }
         finally
@@ -370,8 +343,6 @@ MEMORY JSON:
             sttClient.allowSTTRequests = true;
             sttClient.canTalkAgain = true;
         }
-
-        Debug.Log("[OllamaClient] Whisper+STT enabled after welcome.");
     }
 
     void TrimHistory()
