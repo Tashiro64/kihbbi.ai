@@ -1,70 +1,99 @@
 using System;
+using System.IO;
 using UnityEngine;
 
 public static class WavUtility
 {
-    // Converts an AudioClip to WAV bytes (16-bit PCM)
+    /// <summary>
+    /// Convert AudioClip to WAV byte array (for saving or sending to server)
+    /// </summary>
     public static byte[] FromAudioClip(AudioClip clip)
     {
-        if (clip == null) throw new ArgumentNullException(nameof(clip));
+        if (clip == null)
+            return null;
 
-        int channels = clip.channels;
-        int sampleRate = clip.frequency;
-        int samplesCount = clip.samples;
-
-        float[] samples = new float[samplesCount * channels];
+        var samples = new float[clip.samples * clip.channels];
         clip.GetData(samples, 0);
 
-        // Convert float samples (-1..1) to 16-bit PCM
-        byte[] pcm16 = new byte[samples.Length * 2];
-        const float scale = 32767f;
-
-        for (int i = 0; i < samples.Length; i++)
+        using (var stream = new MemoryStream())
+        using (var writer = new BinaryWriter(stream))
         {
-            short s = (short)Mathf.Clamp(samples[i] * scale, short.MinValue, short.MaxValue);
-            byte[] b = BitConverter.GetBytes(s);
-            pcm16[i * 2] = b[0];
-            pcm16[i * 2 + 1] = b[1];
+            int sampleRate = clip.frequency;
+            int channels = clip.channels;
+            int bitsPerSample = 16;
+
+            // RIFF header
+            writer.Write(new char[4] { 'R', 'I', 'F', 'F' });
+            writer.Write(36 + samples.Length * 2); // file size - 8
+            writer.Write(new char[4] { 'W', 'A', 'V', 'E' });
+
+            // fmt chunk
+            writer.Write(new char[4] { 'f', 'm', 't', ' ' });
+            writer.Write(16); // chunk size
+            writer.Write((short)1); // PCM format
+            writer.Write((short)channels);
+            writer.Write(sampleRate);
+            writer.Write(sampleRate * channels * bitsPerSample / 8); // byte rate
+            writer.Write((short)(channels * bitsPerSample / 8)); // block align
+            writer.Write((short)bitsPerSample);
+
+            // data chunk
+            writer.Write(new char[4] { 'd', 'a', 't', 'a' });
+            writer.Write(samples.Length * 2); // data size
+
+            // PCM samples
+            foreach (float sample in samples)
+            {
+                short s = (short)(Mathf.Clamp(sample, -1f, 1f) * 32767f);
+                writer.Write(s);
+            }
+
+            return stream.ToArray();
         }
-
-        // WAV header (44 bytes)
-        byte[] header = BuildWavHeader(channels, sampleRate, pcm16.Length);
-
-        // Combine header + data
-        byte[] wav = new byte[header.Length + pcm16.Length];
-        Buffer.BlockCopy(header, 0, wav, 0, header.Length);
-        Buffer.BlockCopy(pcm16, 0, wav, header.Length, pcm16.Length);
-
-        return wav;
     }
 
-    private static byte[] BuildWavHeader(int channels, int sampleRate, int dataLength)
+    /// <summary>
+    /// Convert WAV byte array to AudioClip (for playing received audio)
+    /// </summary>
+    public static AudioClip ToAudioClip(byte[] wavBytes, string clipName = "wav")
     {
-        byte[] header = new byte[44];
+        if (wavBytes == null || wavBytes.Length < 44)
+            throw new ArgumentException("Invalid WAV data.");
 
-        int byteRate = sampleRate * channels * 2;
-        int blockAlign = channels * 2;
-        int fileSizeMinus8 = 36 + dataLength;
+        int channels = BitConverter.ToInt16(wavBytes, 22);
+        int sampleRate = BitConverter.ToInt32(wavBytes, 24);
+        int bitsPerSample = BitConverter.ToInt16(wavBytes, 34);
 
-        // RIFF
-        header[0] = (byte)'R'; header[1] = (byte)'I'; header[2] = (byte)'F'; header[3] = (byte)'F';
-        BitConverter.GetBytes(fileSizeMinus8).CopyTo(header, 4);
-        header[8] = (byte)'W'; header[9] = (byte)'A'; header[10] = (byte)'V'; header[11] = (byte)'E';
+        if (bitsPerSample != 16)
+            throw new NotSupportedException("Only 16-bit PCM WAV is supported.");
 
-        // fmt
-        header[12] = (byte)'f'; header[13] = (byte)'m'; header[14] = (byte)'t'; header[15] = (byte)' ';
-        BitConverter.GetBytes(16).CopyTo(header, 16);          // Subchunk1Size
-        BitConverter.GetBytes((short)1).CopyTo(header, 20);    // PCM
-        BitConverter.GetBytes((short)channels).CopyTo(header, 22);
-        BitConverter.GetBytes(sampleRate).CopyTo(header, 24);
-        BitConverter.GetBytes(byteRate).CopyTo(header, 28);
-        BitConverter.GetBytes((short)blockAlign).CopyTo(header, 32);
-        BitConverter.GetBytes((short)16).CopyTo(header, 34);   // BitsPerSample
+        int dataSize = BitConverter.ToInt32(wavBytes, 40);
+        int dataStartIndex = 44;
+        dataSize = Mathf.Min(dataSize, wavBytes.Length - dataStartIndex);
 
-        // data
-        header[36] = (byte)'d'; header[37] = (byte)'a'; header[38] = (byte)'t'; header[39] = (byte)'a';
-        BitConverter.GetBytes(dataLength).CopyTo(header, 40);
+        int sampleCount = dataSize / 2;
+        float[] samples = new float[sampleCount];
+        const float scale = 1f / 32768f;
 
-        return header;
+        int offset = dataStartIndex;
+        for (int i = 0; i < sampleCount; i++)
+        {
+            short sample = BitConverter.ToInt16(wavBytes, offset);
+            samples[i] = sample * scale;
+            offset += 2;
+        }
+
+        int totalSamplesPerChannel = sampleCount / channels;
+
+        AudioClip clip = AudioClip.Create(
+            clipName,
+            totalSamplesPerChannel,
+            channels,
+            sampleRate,
+            false
+        );
+
+        clip.SetData(samples, 0);
+        return clip;
     }
 }

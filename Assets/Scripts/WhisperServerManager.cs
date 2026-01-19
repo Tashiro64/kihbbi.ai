@@ -4,10 +4,26 @@ using UnityEngine;
 
 public class WhisperServerManager : MonoBehaviour
 {
+    [Header("Startup")]
+    public bool autoStartOnLaunch = false; // <-- IMPORTANT: leave false
+	public static bool STTReady = false;
+
     private Process proc;
 
     void Start()
     {
+        if (autoStartOnLaunch)
+            StartServer();
+    }
+
+    public void StartServer()
+    {
+        if (proc != null && !proc.HasExited)
+        {
+            UnityEngine.Debug.Log("ℹ️ Whisper server already running.");
+            return;
+        }
+
         string sttFolder = Path.Combine(Application.streamingAssetsPath, "STT");
         string serverFile = Path.Combine(sttFolder, "whisper_server.py");
 
@@ -29,29 +45,27 @@ public class WhisperServerManager : MonoBehaviour
         proc.StartInfo.RedirectStandardError = true;
 
         proc.OutputDataReceived += (_, e) =>
-		{
-			if (!string.IsNullOrWhiteSpace(e.Data))
-				UnityEngine.Debug.Log("[STT] " + e.Data);
-		};
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                UnityEngine.Debug.Log("[STT] " + e.Data);
+        };
 
-		proc.ErrorDataReceived += (_, e) =>
-		{
-			if (!string.IsNullOrWhiteSpace(e.Data))
-				UnityEngine.Debug.Log("[STT] " + e.Data);
-		};
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                UnityEngine.Debug.Log("[STT] " + e.Data);
+        };
 
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
+		STTReady = true;
+
         UnityEngine.Debug.Log("✅ Whisper server started (python)");
     }
 
-    void OnDisable() => StopServer();
-    void OnDestroy() => StopServer();
-    void OnApplicationQuit() => StopServer();
-
-    private void StopServer()
+    public void StopServer()
     {
         try
         {
@@ -66,4 +80,8 @@ public class WhisperServerManager : MonoBehaviour
         }
         catch { }
     }
+
+    void OnDisable() => StopServer();
+    void OnDestroy() => StopServer();
+    void OnApplicationQuit() => StopServer();
 }

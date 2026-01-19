@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -7,39 +8,70 @@ using UnityEngine.Networking;
 
 public class OllamaClient : MonoBehaviour
 {
+    // Singleton protection
+    private static OllamaClient instance;
+
     [Header("Ollama")]
-    public string ollamaUrl = "http://127.0.0.1:11434/api/generate";
+    public string ollamaChatUrl = "http://127.0.0.1:11434/api/chat";
     public string model = "llama3.1";
 
     [Header("Persona & Memory File")]
     public string personaRelativePath = "AI/persona.json";
-	public string memoryRelativePath = "AI/memory.json";
-	private string memoryJson = "{}";
+    public string memoryRelativePath = "AI/memory.json";
 
     [Header("Flow Control")]
     public AutoVADSTTClient sttClient;
 
+    [Header("Whisper Server")]
+    public WhisperServerManager whisperServerManager;
+    public float whisperBootDelaySeconds = 0.75f;
+
+    [Header("Chat Memory")]
+    public int maxHistoryMessages = 12;
+
+    [Header("Startup")]
+    public bool sendWelcomeOnStart = true;
+
+    [TextArea(2, 5)]
+    public string welcomePrompt =
+        "Greet Tashiro warmly in-character. Keep it short, sweet, and playful.";
+
+    [Tooltip("If enabled, Whisper server + STT are disabled until welcome message is completed.")]
+    public bool delaySTTUntilWelcomeDone = true;
 
     [Header("Debug")]
     public bool logRequests = true;
     public bool logPersonaLoaded = true;
     public bool logRawResponse = false;
+    public bool logTiming = true;
 
+    // Internals
     private string personaJson = "{}";
+    private string memoryJson = "{}";
+    private bool requestInFlight = false;
+    private bool welcomeSent = false;
 
     [Serializable]
-    public class OllamaRequest
+    public class ChatMessage
     {
-        public string model;
-        public string prompt;
-        public string system;
-        public bool stream = false;
+        public string role;     // "system" | "user" | "assistant"
+        public string content;
     }
 
     [Serializable]
-    public class OllamaResponse
+    public class OllamaChatRequest
     {
-        public string response;
+        public string model;
+        public bool stream = false;
+        public List<ChatMessage> messages;
+    }
+
+    [Serializable]
+    public class OllamaChatResponse
+    {
+        public ChatMessage message;
+        public bool done;
+        public string error;
     }
 
     [Serializable]
@@ -50,11 +82,61 @@ public class OllamaClient : MonoBehaviour
     }
 
     public Action<KihbbiAIResponse> OnAIResponse;
+    public Action<string, string> OnSentenceReady;
+
+    private readonly List<ChatMessage> chatHistory = new List<ChatMessage>();
 
     void Awake()
     {
+        // singleton guard
+        if (instance != null && instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        instance = this;
+
+        Debug.Log("[OllamaClient] Awake instance id = " + GetInstanceID());
+
         LoadPersona();
         LoadMemory();
+        BuildInitialSystemMessage();
+
+        // PHASE 1: disable Whisper + STT until welcome is done
+        if (delaySTTUntilWelcomeDone)
+        {
+            if (sttClient != null)
+            {
+                sttClient.allowSTTRequests = false;
+                sttClient.canTalkAgain = false;
+                sttClient.enabled = false;
+            }
+
+            if (whisperServerManager != null)
+            {
+                // Prevent its Start() from auto-running anything
+                whisperServerManager.enabled = false;
+            }
+
+            Debug.Log("[OllamaClient] Boot mode: Whisper+STT disabled until welcome completes.");
+        }
+    }
+
+    IEnumerator Start()
+    {
+        yield return null;
+
+        if (sendWelcomeOnStart && !welcomeSent)
+        {
+            welcomeSent = true;
+            Debug.Log("[OllamaClient] Sending welcome message...");
+            AskInternal(welcomePrompt, lockStt: false, isWelcome: true);
+        }
+        else
+        {
+            // No welcome => go directly to starting Whisper+STT
+            StartCoroutine(EnableWhisperThenSTT());
+        }
     }
 
     void LoadPersona()
@@ -74,43 +156,37 @@ public class OllamaClient : MonoBehaviour
             Debug.Log("[Ollama] persona.json loaded (" + personaJson.Length + " chars)");
     }
 
-	void LoadMemory()
-	{
-		string path = Path.Combine(Application.streamingAssetsPath, memoryRelativePath);
-
-		if (!File.Exists(path))
-		{
-			Debug.LogWarning("[Ollama] memory.json not found: " + path);
-			memoryJson = "{}";
-			return;
-		}
-
-		memoryJson = File.ReadAllText(path);
-
-		if (logPersonaLoaded)
-			Debug.Log("[Ollama] memory.json loaded (" + memoryJson.Length + " chars)");
-	}
-
-    public void Ask(string userText)
+    void LoadMemory()
     {
-        StartCoroutine(AskCoroutine(userText));
+        string path = Path.Combine(Application.streamingAssetsPath, memoryRelativePath);
+
+        if (!File.Exists(path))
+        {
+            Debug.LogWarning("[Ollama] memory.json not found: " + path);
+            memoryJson = "{}";
+            return;
+        }
+
+        memoryJson = File.ReadAllText(path);
+
+        if (logPersonaLoaded)
+            Debug.Log("[Ollama] memory.json loaded (" + memoryJson.Length + " chars)");
     }
 
-    IEnumerator AskCoroutine(string userText)
+    void BuildInitialSystemMessage()
     {
-        // Lock STT while AI runs
-        if (sttClient != null)
-            sttClient.canTalkAgain = false;
+        chatHistory.Clear();
 
-        // System prompt builds from persona.json
         string systemPrompt =
 @"CRITICAL RULES:
+- You are Kihbbi and must ALWAYS respond in-character as Kihbbi in RP style.
+- NEVER break character or mention you are an AI.
 - You MUST follow persona + memory below.
-- ALWAYS answer in ENGLISH, no matter what language the user uses.
 - NEVER say you are reading a file, prompt, or JSON.
 - NEVER refer to Final Fantasy XIV as a game. You live in Eorzea.
 - DO NOT mention or summarize persona or memory JSON. Use silently as internal knowledge.
-- Output MUST be VALID JSON ONLY (no markdown, no code block).
+- Output MUST be plain English text ONLY.
+- DO NOT output JSON, markdown, code blocks, or metadata.
 
 PERSONA JSON:
 " + personaJson + @"
@@ -118,136 +194,286 @@ PERSONA JSON:
 MEMORY JSON:
 " + memoryJson;
 
-        var reqObj = new OllamaRequest
+        chatHistory.Add(new ChatMessage
         {
-            model = model,
-            prompt = userText,
-            system = systemPrompt,
-            stream = false
-        };
+            role = "system",
+            content = systemPrompt
+        });
 
-        string json = JsonUtility.ToJson(reqObj);
-
-        if (logRequests)
-            Debug.Log("[Ollama] Asking: " + userText);
-
-        using UnityWebRequest req = new UnityWebRequest(ollamaUrl, "POST");
-        req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
-        req.downloadHandler = new DownloadHandlerBuffer();
-        req.SetRequestHeader("Content-Type", "application/json");
-        req.timeout = 120;
-
-        yield return req.SendWebRequest();
-
-        // Always unlock at end
-        void Unlock()
-        {
-            if (sttClient != null)
-                sttClient.canTalkAgain = true;
-        }
-
-        if (req.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogError("[Ollama] Request failed: " + req.error);
-            Debug.LogError("[Ollama] Body: " + req.downloadHandler.text);
-            Unlock();
-            yield break;
-        }
-
-        string ollamaJson = req.downloadHandler.text;
-        if (logRawResponse)
-            Debug.Log("[Ollama] Raw: " + ollamaJson);
-
-        OllamaResponse o = JsonUtility.FromJson<OllamaResponse>(ollamaJson);
-        if (o == null || string.IsNullOrWhiteSpace(o.response))
-        {
-            Debug.LogError("[Ollama] Empty response");
-            Unlock();
-            yield break;
-        }
-
-        string aiText = o.response.Trim();
-
-        // parse JSON inside response
-        KihbbiAIResponse parsed = TryParseAIJson(aiText);
-        if (parsed == null)
-        {
-            Debug.LogWarning("[Ollama] AI did not return valid JSON. Fallback raw text.");
-            parsed = new KihbbiAIResponse
-            {
-                answer = aiText,
-                emotion = "neutral"
-            };
-        }
-
-		if (string.IsNullOrWhiteSpace(parsed.emotion) || parsed.emotion == "neutral")
-		{
-			parsed.emotion = InferEmotionFromText(parsed.answer);
-		}
-
-        Debug.Log($"🤖 AI Answer: {parsed.answer}");
-        Debug.Log($"🙂 Emotion: {parsed.emotion}");
-
-        OnAIResponse?.Invoke(parsed);
-
-        Unlock();
+        Debug.Log("[Ollama] System message initialized.");
     }
 
-    KihbbiAIResponse TryParseAIJson(string s)
+    public void ResetConversation()
     {
-        int a = s.IndexOf('{');
-        int b = s.LastIndexOf('}');
-        if (a < 0 || b <= a) return null;
+        BuildInitialSystemMessage();
+        Debug.Log("[Ollama] Conversation reset.");
+    }
 
-        string json = s.Substring(a, b - a + 1);
+    public void Ask(string userText)
+    {
+        AskInternal(userText, lockStt: true, isWelcome: false);
+    }
+
+    void AskInternal(string userText, bool lockStt, bool isWelcome)
+    {
+        if (requestInFlight)
+        {
+            Debug.LogWarning("[Ollama] Ask ignored: request already in flight.");
+            return;
+        }
+
+        StartCoroutine(AskCoroutine(userText, lockStt, isWelcome));
+    }
+
+    IEnumerator AskCoroutine(string userText, bool lockStt, bool isWelcome)
+    {
+        requestInFlight = true;
+
+        float t0 = Time.realtimeSinceStartup;
+
+        // Lock STT while AI runs (not used during welcome because STT is disabled anyway)
+        if (lockStt && sttClient != null)
+        {
+            sttClient.canTalkAgain = false;
+            sttClient.allowSTTRequests = false;
+        }
 
         try
         {
-            return JsonUtility.FromJson<KihbbiAIResponse>(json);
+            chatHistory.Add(new ChatMessage { role = "user", content = userText });
+            TrimHistory();
+
+            var reqObj = new OllamaChatRequest
+            {
+                model = model,
+                stream = false,
+                messages = chatHistory
+            };
+
+            string json = JsonUtility.ToJson(reqObj);
+
+            if (logRequests)
+                Debug.Log("[Ollama] Asking: " + userText + $" (payload chars={json.Length})");
+
+            using UnityWebRequest req = new UnityWebRequest(ollamaChatUrl, "POST");
+            req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+
+            // Give welcome more time for cold start
+            req.timeout = isWelcome ? 600 : 240;
+
+            yield return req.SendWebRequest();
+
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError("[Ollama] Request failed: " + req.error);
+                Debug.LogError("[Ollama] Body: " + req.downloadHandler.text);
+                yield break;
+            }
+
+            string responseJson = req.downloadHandler.text;
+
+            if (logRawResponse)
+                Debug.Log("[Ollama] Raw: " + responseJson);
+
+            OllamaChatResponse o = null;
+            try
+            {
+                o = JsonUtility.FromJson<OllamaChatResponse>(responseJson);
+            }
+            catch
+            {
+                Debug.LogError("[Ollama] Failed to parse /api/chat JSON.");
+                yield break;
+            }
+
+            if (o == null)
+            {
+                Debug.LogError("[Ollama] Null response object.");
+                yield break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(o.error))
+            {
+                Debug.LogError("[Ollama] Ollama error: " + o.error);
+                yield break;
+            }
+
+            if (o.message == null || string.IsNullOrWhiteSpace(o.message.content))
+            {
+                Debug.LogError("[Ollama] Empty assistant message.");
+                yield break;
+            }
+
+            string aiText = o.message.content.Trim();
+
+            chatHistory.Add(new ChatMessage { role = "assistant", content = aiText });
+            TrimHistory();
+
+            var parsed = new KihbbiAIResponse
+            {
+                answer = aiText,
+                emotion = InferEmotionFromText(aiText)
+            };
+
+            Debug.Log($"🤖 AI Answer: {parsed.answer}");
+            Debug.Log($"🙂 Emotion: {parsed.emotion}");
+
+            EmitAllSentences(aiText);
+
+            if (logTiming)
+            {
+                float t1 = Time.realtimeSinceStartup;
+                Debug.Log($"[Ollama] Total time: {(t1 - t0):0.000}s");
+            }
+
+            OnAIResponse?.Invoke(parsed);
         }
-        catch
+        finally
         {
-            return null;
+            requestInFlight = false;
+
+            // If welcome finished, start Whisper server + then enable STT
+            if (isWelcome && delaySTTUntilWelcomeDone)
+            {
+                StartCoroutine(EnableWhisperThenSTT());
+            }
+            else
+            {
+                // Normal unlock
+                if (lockStt && sttClient != null)
+                {
+                    sttClient.canTalkAgain = true;
+                    sttClient.allowSTTRequests = true;
+                }
+            }
         }
     }
 
-	string InferEmotionFromText(string text)
-	{
-		if (string.IsNullOrWhiteSpace(text))
-			return "neutral";
+    IEnumerator EnableWhisperThenSTT()
+    {
+        // Start Whisper server now (only after welcome)
+        if (whisperServerManager != null)
+        {
+            whisperServerManager.enabled = true;
+            whisperServerManager.StartServer();
+        }
 
-		string t = text.ToLowerInvariant();
+        // Give uvicorn a moment to bind the port
+        if (whisperBootDelaySeconds > 0f)
+            yield return new WaitForSeconds(whisperBootDelaySeconds);
 
-		// angry
-		if (t.Contains("wtf") || t.Contains("shut up") || t.Contains("stop") || t.Contains("i'm pissed") || t.Contains("annoying"))
-			return "angry";
+        if (sttClient != null)
+        {
+            sttClient.enabled = true;
+            sttClient.allowSTTRequests = true;
+            sttClient.canTalkAgain = true;
+        }
 
-		// sad
-		if (t.Contains("sorry") || t.Contains("i'm sorry") || t.Contains("that sucks") || t.Contains("i feel bad") || t.Contains("sad"))
-			return "sad";
+        Debug.Log("[OllamaClient] Whisper+STT enabled after welcome.");
+    }
 
-		// surprised
-		if (t.Contains("no way") || t.Contains("what?!") || t.Contains("what?!") || t.Contains("wait") || t.Contains("holy") || text.Contains("?!"))
-			return "surprised";
+    void TrimHistory()
+    {
+        int systemCount = 1;
+        int maxTotal = systemCount + maxHistoryMessages;
 
-		// happy / excited
-		if (t.Contains("yay") || t.Contains("yaaay") || t.Contains("omg") || t.Contains("hehe") || t.Contains("lol") || t.Contains("lmao"))
-			return "happy";
+        if (chatHistory.Count <= maxTotal)
+            return;
 
-		// punctuation based
-		int exclamations = 0;
-		int questions = 0;
-		foreach (char c in text)
-		{
-			if (c == '!') exclamations++;
-			if (c == '?') questions++;
-		}
+        int removeCount = chatHistory.Count - maxTotal;
+        chatHistory.RemoveRange(systemCount, removeCount);
+    }
 
-		if (exclamations >= 2) return "happy";
-		if (exclamations == 1) return "surprised";
-		if (questions >= 2) return "surprised";
+    void EmitAllSentences(string fullText)
+    {
+        if (string.IsNullOrWhiteSpace(fullText))
+            return;
 
-		return "neutral";
-	}
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < fullText.Length; i++)
+        {
+            char c = fullText[i];
+            sb.Append(c);
 
+            bool end = c == '.' || c == '!' || c == '?' || c == '\n';
+            if (!end) continue;
+
+            string sentence = sb.ToString().Trim();
+            sb.Length = 0;
+
+            // Skip if too short (just punctuation) or empty
+            if (!string.IsNullOrWhiteSpace(sentence) && sentence.Length > 1)
+            {
+                // Remove trailing punctuation for checking
+                string textOnly = sentence.TrimEnd('.', '!', '?', ' ');
+                
+                // Only emit if there's actual text content (at least 2 chars)
+                if (textOnly.Length >= 2)
+                {
+                    string emo = InferEmotionFromText(sentence);
+                    OnSentenceReady?.Invoke(sentence, emo);
+                }
+            }
+        }
+
+        string leftover = sb.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(leftover) && leftover.Length > 1)
+        {
+            string emo = InferEmotionFromText(leftover);
+            OnSentenceReady?.Invoke(leftover, emo);
+        }
+    }
+
+    string InferEmotionFromText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "neutral";
+
+        string raw = text.Trim();
+        string t = raw.ToLowerInvariant();
+
+        int happy = 0, sad = 0, angry = 0, surprised = 0;
+
+        int exclamations = 0;
+        int questions = 0;
+        foreach (char c in raw)
+        {
+            if (c == '!') exclamations++;
+            if (c == '?') questions++;
+        }
+
+        if (raw.Contains("?!") || raw.Contains("!?")) surprised += 4;
+        if (questions >= 2) surprised += 2;
+        if (exclamations >= 3) { happy += 2; surprised += 1; angry += 1; }
+        if (exclamations == 2) happy += 1;
+
+        if (t.Contains("hehe") || t.Contains("haha") || t.Contains("lol") || t.Contains("lmao")) happy += 3;
+        if (t.Contains("aww") || t.Contains("awww") || t.Contains("so cute") || t.Contains("adorable")) happy += 2;
+        if (t.Contains("yay") || t.Contains("yaaay") || t.Contains("yesss")) happy += 2;
+        if (raw.Contains("♡") || raw.Contains("❤") || raw.Contains("<3")) happy += 3;
+
+        if (t.Contains("i'm sorry") || t.Contains("im sorry") || t.Contains("i apologize")) sad += 3;
+        if (t.Contains("it's okay") || t.Contains("its okay") || t.Contains("it will be okay") || t.Contains("it’ll be okay")) sad += 2;
+        if (t.Contains("poor thing") || t.Contains("oh no") || t.Contains("that's awful") || t.Contains("that’s awful")) sad += 2;
+        if (raw.Contains("...")) sad += 1;
+
+        if (t.Contains("tch") || t.Contains("hmph") || t.Contains("idiot") || t.Contains("moron")) angry += 3;
+        if (t.Contains("shut up") || t.Contains("stop it") || t.Contains("enough")) angry += 4;
+        if (t.Contains("annoying") || t.Contains("you're annoying")) angry += 3;
+
+        if (t.Contains("no way") || t.Contains("what the") || t.Contains("wait") || t.Contains("seriously")) surprised += 3;
+        if (t.Contains("oh my") || t.Contains("holy") || t.Contains("gods")) surprised += 2;
+
+        int max = Mathf.Max(happy, sad, angry, surprised);
+        if (max <= 1) return "neutral";
+
+        if (angry == max) return "angry";
+        if (sad == max) return "sad";
+        if (surprised == max) return "surprised";
+        if (happy == max) return "happy";
+
+        return "neutral";
+    }
 }

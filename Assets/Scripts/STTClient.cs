@@ -6,8 +6,8 @@ using UnityEngine.Networking;
 
 public class AutoVADSTTClient : MonoBehaviour
 {
-	[Header("AI")]
-	public OllamaClient ollama;
+    [Header("AI")]
+    public OllamaClient ollama;
 
     [Header("STT Server")]
     public string sttUrl = "http://127.0.0.1:8007/stt";
@@ -29,8 +29,11 @@ public class AutoVADSTTClient : MonoBehaviour
     [Tooltip("Hard cap so you don't record forever.")]
     public float maxSpeechSeconds = 20f;
 
-	[Header("Flow Control")]
-	public bool canTalkAgain = true;
+    [Header("Flow Control")]
+    public bool canTalkAgain = true;
+
+    [Tooltip("HARD GATE: if false, we will NOT send anything to Whisper, even if VAD triggers.")]
+    public bool allowSTTRequests = true;
 
     [Header("Debug")]
     public bool showDebugLogs = true;
@@ -63,6 +66,11 @@ public class AutoVADSTTClient : MonoBehaviour
         public float time_sec;
         public string model;
         public string device;
+    }
+
+    void Awake()
+    {
+        Debug.Log("[AutoVADSTTClient] Awake instance id = " + GetInstanceID());
     }
 
     void Start()
@@ -137,6 +145,10 @@ public class AutoVADSTTClient : MonoBehaviour
         // Speech state machine
         if (!isSpeaking)
         {
+            // ✅ HARD gate: don't even start a "speech session" if STT or XTTS not allowed
+            if (!allowSTTRequests || !WhisperServerManager.STTReady || !PiperServerManager.PiperReady)
+                return;
+
             // Start speaking when we cross threshold
             if (canTalkAgain && rms >= startThreshold)
             {
@@ -207,6 +219,23 @@ public class AutoVADSTTClient : MonoBehaviour
         // reset speaking timer now
         speakingTimer = 0f;
 
+        // ✅ HARD gate: never send if blocked
+        if (!allowSTTRequests || !WhisperServerManager.STTReady || !PiperServerManager.PiperReady)
+        {
+            if (showDebugLogs)
+                Debug.Log("[AutoVAD] Utterance captured but STT/XTTS is blocked. Dropping it.");
+            utterance.Clear();
+            return;
+        }
+
+        if (!canTalkAgain)
+        {
+            if (showDebugLogs)
+                Debug.Log("[AutoVAD] Utterance captured but canTalkAgain=false. Dropping it.");
+            utterance.Clear();
+            return;
+        }
+
         if (utterance.Count <= sampleRate / 4)
         {
             if (showDebugLogs) Debug.Log("[AutoVAD] Utterance too short, ignoring.");
@@ -227,6 +256,7 @@ public class AutoVADSTTClient : MonoBehaviour
 
         // Convert to WAV bytes and send
         byte[] wavBytes = WavUtility.FromAudioClip(clip);
+
         StartCoroutine(SendWavToSTT(wavBytes));
 
         utterance.Clear();
@@ -234,6 +264,21 @@ public class AutoVADSTTClient : MonoBehaviour
 
     IEnumerator SendWavToSTT(byte[] wavBytes)
     {
+        // ✅ HARD gate (most important spot)
+        if (!allowSTTRequests)
+        {
+            if (showDebugLogs)
+                Debug.Log("[AutoVAD] STT request BLOCKED at send stage (allowSTTRequests=false).");
+            yield break;
+        }
+
+        if (!canTalkAgain)
+        {
+            if (showDebugLogs)
+                Debug.Log("[AutoVAD] STT request BLOCKED at send stage (canTalkAgain=false).");
+            yield break;
+        }
+
         WWWForm form = new WWWForm();
         form.AddBinaryData("audio", wavBytes, "audio.wav", "audio/wav");
 
@@ -258,11 +303,13 @@ public class AutoVADSTTClient : MonoBehaviour
         Debug.Log($"✅ STT TEXT: {res.text}");
         Debug.Log($"🌐 LANG: {res.lang}");
 
-		if (ollama != null && !string.IsNullOrWhiteSpace(res.text))
-		{
-    		canTalkAgain = false;     // 🔒 lock
-    		ollama.Ask(res.text);
-		}
+        if (ollama != null && !string.IsNullOrWhiteSpace(res.text))
+        {
+            canTalkAgain = false; // 🔒 lock
+            allowSTTRequests = false; // 🔒 HARD LOCK until Ollama finishes (Ollama must re-enable!)
+
+            ollama.Ask(res.text);
+        }
     }
 
     float ComputeRMS(float[] samples)
@@ -290,12 +337,15 @@ public class AutoVADSTTClient : MonoBehaviour
     {
         if (!showOnScreenStatus || !Application.isPlaying) return;
 
-        GUILayout.BeginArea(new Rect(10, 10, 520, 260), GUI.skin.box);
+        GUILayout.BeginArea(new Rect(10, 10, 520, 320), GUI.skin.box);
         GUILayout.Label("AutoVAD STT");
         GUILayout.Label("Mic: " + micDevice);
         GUILayout.Label("Status: " + (isSpeaking ? "🎤 speaking" : "listening..."));
         GUILayout.Label($"RMS: {lastRms:0.0000}");
-		GUILayout.Label($"canTalkAgain: {(canTalkAgain ? "✅ TRUE" : "⛔ FALSE (waiting AI)")}");
+        GUILayout.Label($"canTalkAgain: {(canTalkAgain ? "✅ TRUE" : "⛔ FALSE (waiting AI)")}");
+        GUILayout.Label($"allowSTTRequests: {(allowSTTRequests ? "✅ TRUE" : "⛔ FALSE (HARD BLOCK)")}");
+        GUILayout.Label($"Whisper Ready: {(WhisperServerManager.STTReady ? "✅ TRUE" : "⛔ FALSE")}");
+        GUILayout.Label($"Piper Ready: {(PiperServerManager.PiperReady ? "✅ TRUE" : "⛔ FALSE")}");
         GUILayout.Label($"Threshold: {startThreshold:0.0000} | SilenceStop: {stopAfterSilenceSeconds:0.0}s | PreRoll: {preRollSeconds:0.00}s");
         GUILayout.EndArea();
     }
