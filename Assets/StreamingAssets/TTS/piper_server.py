@@ -98,6 +98,19 @@ class TTSRequest(BaseModel):
     length_scale: float | None = None  # Speech rate: 1.0=normal, >1.0=slower, <1.0=faster
 
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    if voice is None:
+        return {"status": "error", "message": "Voice not loaded"}
+    
+    return {
+        "status": "healthy",
+        "voice_loaded": voice is not None,
+        "model": "en_US-libritts_r-medium" if voice else None
+    }
+
+
 @app.get("/test")
 def test_tts():
     """Test endpoint to verify Piper is working"""
@@ -150,6 +163,11 @@ def tts_endpoint(req: TTSRequest):
         
     text = (req.text or "").strip()
     
+    # Additional text validation
+    if len(text) > 2000:  # Prevent extremely long text that might cause issues
+        print(f"[Piper] WARNING: Text too long ({len(text)} chars), truncating")
+        text = text[:2000]
+    
     # Determine speaker ID
     speaker_id = None
     if req.speaker_id is not None:
@@ -175,12 +193,16 @@ def tts_endpoint(req: TTSRequest):
     print(f"[Piper] Generating TTS for: '{text[:100]}...' with speaker_id={speaker_id}, length_scale={length_scale}")
     
     # Create synthesis config
-    syn_config = SynthesisConfig(
-        speaker_id=speaker_id,
-        length_scale=length_scale,
-        normalize_audio=True,
-        volume=1.0
-    )
+    try:
+        syn_config = SynthesisConfig(
+            speaker_id=speaker_id,
+            length_scale=length_scale,
+            normalize_audio=True,
+            volume=1.0
+        )
+    except Exception as config_error:
+        print(f"[Piper] ERROR creating SynthesisConfig: {config_error}")
+        return create_silent_wav(0.1)
     
     if not text:
         print("[Piper] ERROR: Empty text received")
@@ -263,7 +285,13 @@ def tts_endpoint(req: TTSRequest):
                         wav_file.writeframes(audio_bytes)
                     
                     wav_data = audio_buffer.getvalue()
-                    return Response(content=wav_data, media_type="audio/wav")
+                    
+                    # Enhanced validation
+                    if wav_data and len(wav_data) > 44:
+                        print(f"[Piper] Manual method SUCCESS - Generated {len(wav_data)} bytes of audio")
+                        return Response(content=wav_data, media_type="audio/wav")
+                    else:
+                        print(f"[Piper] Manual method generated invalid audio: {len(wav_data) if wav_data else 0} bytes")
                 else:
                     print(f"[Piper] Manual method returned {len(audio_data) if audio_data else 0} audio samples")
             else:
@@ -308,7 +336,9 @@ def tts_endpoint(req: TTSRequest):
                     os.unlink(temp_path)
             
         except Exception as method1_error:
-            pass
+            print(f"[Piper] Method 1 (synthesize_wav) failed: {method1_error}")
+            import traceback
+            print(f"[Piper] Method 1 traceback: {traceback.format_exc()}")
         
         # Method 2: Try basic synthesize to WAV file buffer (no speaker support - LAST RESORT)
         try:
@@ -330,12 +360,18 @@ def tts_endpoint(req: TTSRequest):
                 return Response(content=wav_data, media_type="audio/wav")
                 
         except Exception as method2_error:
-            pass
+            print(f"[Piper] Method 2 (basic synthesize) failed: {method2_error}")
+            import traceback
+            print(f"[Piper] Method 2 traceback: {traceback.format_exc()}")
         
         # If all methods fail, return silence
+        print(f"[Piper] ERROR: All synthesis methods failed for text: '{text[:50]}...'")
         return create_silent_wav(0.1)
         
     except Exception as e:
+        print(f"[Piper] CRITICAL ERROR in tts_endpoint: {e}")
+        import traceback
+        print(f"[Piper] Critical error traceback: {traceback.format_exc()}")
         return create_silent_wav(0.1)
 
 

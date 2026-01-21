@@ -1,12 +1,40 @@
 {
-	
-  {
-	  "memory" : "if i could move out of Mist, i'd move to Shirogane",
-	  "keyword" : ["move","shirogane"]
-  },
-  {
-	  "memory" : "Kihbbi's favorite singer is ponponshit",
-	  "keyword" : ["favorite","singer","ponponshit"]
-  },
-  
+    "memories": [
+        {
+            "memory": "Tashiro loves pizza",
+            "keyword": [
+                "tashiro",
+                "loves",
+                "pizza"
+            ]
+        },
+        {
+            "memory": "Kihbbi loves pizza",
+            "keyword": [
+                "kihbbi",
+                "loves",
+                "pizza"
+            ]
+        },
+        {
+            "memory": "*rikku's arrival is accompanied by a cheerful \"mmm, rikku-chan! *bounces over* oh, hi tashiro-chan! *waves at both*\"",
+            "keyword": [
+                "kihbbi",
+                "*rikku",
+                "arrival",
+                "accompanied",
+                "cheerful",
+                "mmm",
+                "*rikku's",
+                "\"mmm,",
+                "rikku-chan!",
+                "*bounces",
+                "over*",
+                "oh,",
+                "tashiro-chan!",
+                "*waves",
+                "both*\""
+            ]
+        }
+    ]
 }

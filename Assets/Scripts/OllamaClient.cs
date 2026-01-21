@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -15,9 +16,8 @@ public class OllamaClient : MonoBehaviour
     public string ollamaChatUrl = "http://127.0.0.1:11434/api/chat";
     public string model = "llama3.1";
 
-    [Header("Persona & Memory File")]
+    [Header("Persona File")]
     public string personaRelativePath = "AI/persona.json";
-    public string memoryRelativePath = "AI/memory.json";
 
     [Header("Flow Control")]
     public AutoVADSTTClient sttClient;
@@ -47,7 +47,6 @@ public class OllamaClient : MonoBehaviour
 
     // Internals
     private string personaJson = "{}";
-    private string memoryJson = "{}";
     private bool requestInFlight = false;
     private bool welcomeSent = false;
 
@@ -97,7 +96,6 @@ public class OllamaClient : MonoBehaviour
         instance = this;
 
         LoadPersona();
-        LoadMemory();
         BuildInitialSystemMessage();
 
         // PHASE 1: disable Whisper + STT until welcome is done
@@ -148,21 +146,7 @@ public class OllamaClient : MonoBehaviour
         personaJson = File.ReadAllText(path);
     }
 
-    void LoadMemory()
-    {
-        string path = Path.Combine(Application.streamingAssetsPath, memoryRelativePath);
-
-        if (!File.Exists(path))
-        {
-            Debug.LogWarning("[Ollama] memory.json not found: " + path);
-            memoryJson = "{}";
-            return;
-        }
-
-        memoryJson = File.ReadAllText(path);
-    }
-
-    void BuildInitialSystemMessage()
+    public void BuildInitialSystemMessage()
     {
         chatHistory.Clear();
 
@@ -170,18 +154,15 @@ public class OllamaClient : MonoBehaviour
 @"CRITICAL RULES:
 - You are Kihbbi and must ALWAYS respond in-character as Kihbbi in RP style.
 - NEVER break character or mention you are an AI.
-- You MUST follow persona + memory below.
+- You MUST follow persona below.
 - NEVER say you are reading a file, prompt, or JSON.
 - NEVER refer to Final Fantasy XIV as a game. You live in Eorzea.
-- DO NOT mention or summarize persona or memory JSON. Use silently as internal knowledge.
+- DO NOT mention or summarize persona JSON. Use silently as internal knowledge.
 - Output MUST be plain English text ONLY.
 - DO NOT output JSON, markdown, code blocks, or metadata.
 
 PERSONA JSON:
-" + personaJson + @"
-
-MEMORY JSON:
-" + memoryJson;
+" + personaJson;
 
         chatHistory.Add(new ChatMessage
         {
@@ -192,7 +173,57 @@ MEMORY JSON:
 
     public void ResetConversation()
     {
+        Debug.Log("[Ollama] Resetting conversation...");
         BuildInitialSystemMessage();
+        Debug.Log("[Ollama] Conversation reset complete.");
+    }
+
+    [ContextMenu("Force Reset Conversation")]
+    public void ForceResetConversation()
+    {
+        ResetConversation();
+    }
+
+    [ContextMenu("Test Basic Ollama")]
+    public void TestBasicOllama()
+    {
+        Debug.Log("[Ollama] Testing basic Ollama connection...");
+        StartCoroutine(TestOllamaDirectly());
+    }
+    
+    private System.Collections.IEnumerator TestOllamaDirectly()
+    {
+        var testRequest = new OllamaChatRequest
+        {
+            model = model,
+            stream = false,
+            messages = new List<ChatMessage>
+            {
+                new ChatMessage { role = "system", content = "You are Kihbbi. Say hello." },
+                new ChatMessage { role = "user", content = "Hello" }
+            }
+        };
+
+        string json = JsonUtility.ToJson(testRequest);
+        
+        using var req = new UnityWebRequest(ollamaChatUrl, "POST");
+        req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(json));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.timeout = 30;
+
+        yield return req.SendWebRequest();
+
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            Debug.Log("[Ollama] Direct test SUCCESS");
+            Debug.Log("[Ollama] Direct test response: " + req.downloadHandler.text);
+        }
+        else
+        {
+            Debug.LogError("[Ollama] Direct test FAILED: " + req.error);
+            Debug.LogError("[Ollama] Direct test response: " + req.downloadHandler.text);
+        }
     }
 
     public void Ask(string userText)
@@ -236,6 +267,16 @@ MEMORY JSON:
             };
 
             string json = JsonUtility.ToJson(reqObj);
+            
+            if (logRequests)
+            {
+                Debug.Log($"[Ollama] Request JSON length: {json.Length} characters");
+                Debug.Log($"[Ollama] System message length: {(chatHistory.Count > 0 ? chatHistory[0].content.Length : 0)} characters");
+                if (chatHistory.Count > 0 && chatHistory[0].content.Length > 2000)
+                {
+                    Debug.Log($"[Ollama] System message preview: {chatHistory[0].content.Substring(0, 500)}...");
+                }
+            }
 
             using UnityWebRequest req = new UnityWebRequest(ollamaChatUrl, "POST");
             req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
@@ -250,26 +291,45 @@ MEMORY JSON:
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError("[Ollama] Request failed: " + req.error);
-                Debug.LogError("[Ollama] Body: " + req.downloadHandler.text);
+                Debug.LogError("[Ollama] Response Body: " + (req.downloadHandler?.text ?? "null"));
                 yield break;
             }
 
             string responseJson = req.downloadHandler.text;
+            
+            // Always log raw response when we get empty messages to debug
+            if (logRawResponse || string.IsNullOrWhiteSpace(responseJson))
+            {
+                Debug.Log("[Ollama] Raw response: " + (responseJson ?? "null"));
+                Debug.Log("[Ollama] Response length: " + (responseJson?.Length ?? 0));
+            }
 
             OllamaChatResponse o = null;
             try
             {
                 o = JsonUtility.FromJson<OllamaChatResponse>(responseJson);
+                
+                if (o == null)
+                {
+                    Debug.LogError("[Ollama] Failed to parse response JSON - result was null");
+                    Debug.LogError("[Ollama] Raw response for debugging: " + responseJson);
+                    yield break;
+                }
+                
+                // Log response structure for debugging
+                if (logRequests)
+                {
+                    Debug.Log($"[Ollama] Response parsed - done: {o.done}, error: '{o.error}', message null: {o.message == null}");
+                    if (o.message != null)
+                    {
+                        Debug.Log($"[Ollama] Message role: '{o.message.role}', content null: {o.message.content == null}, content length: {o.message.content?.Length ?? 0}");
+                    }
+                }
             }
-            catch
+            catch (System.Exception parseEx)
             {
-                Debug.LogError("[Ollama] Failed to parse /api/chat JSON.");
-                yield break;
-            }
-
-            if (o == null)
-            {
-                Debug.LogError("[Ollama] Null response object.");
+                Debug.LogError("[Ollama] Failed to parse /api/chat JSON: " + parseEx.Message);
+                Debug.LogError("[Ollama] Raw response for debugging: " + responseJson);
                 yield break;
             }
 
@@ -282,6 +342,22 @@ MEMORY JSON:
             if (o.message == null || string.IsNullOrWhiteSpace(o.message.content))
             {
                 Debug.LogError("[Ollama] Empty assistant message.");
+                
+                // Debug the conversation state
+                Debug.LogError($"[Ollama] Chat history count: {chatHistory.Count}");
+                for (int i = 0; i < chatHistory.Count; i++)
+                {
+                    var msg = chatHistory[i];
+                    Debug.LogError($"[Ollama] Message {i}: role='{msg.role}', content_length={msg.content?.Length ?? 0}");
+                    if (msg.role == "user")
+                    {
+                        Debug.LogError($"[Ollama] User message: '{msg.content}'");
+                    }
+                }
+                
+                // Try to reset conversation and retry once
+                Debug.LogError("[Ollama] Attempting conversation reset...");
+                ResetConversation();
                 yield break;
             }
 
@@ -300,6 +376,9 @@ MEMORY JSON:
             Debug.Log($"🙂 Emotion: {parsed.emotion}");
 
             EmitAllSentences(aiText);
+
+            // Start background fact extraction during TTS
+            StartCoroutine(ExtractAndSaveFactsBackground(userText, aiText));
 
             OnAIResponse?.Invoke(parsed);
         }
@@ -490,5 +569,156 @@ MEMORY JSON:
         if (happy == max) return "happy";
 
         return "neutral";
+    }
+
+    private IEnumerator ExtractAndSaveFactsBackground(string userText, string aiText)
+    {
+        Debug.Log("[Memory] Starting background fact extraction...");
+
+        // Process user text separately 
+        StartCoroutine(ExtractUserFacts(userText));
+        
+        // Process AI text separately
+        StartCoroutine(ExtractAIFacts(aiText));
+        
+        yield break; // This method just starts the two separate processes
+    }
+
+    private IEnumerator ExtractUserFacts(string userText)
+    {
+        string userFactPrompt = $@"Convert this user message to third-person facts about Tashiro. Replace 'I' with 'Tashiro'. Only extract important facts about preferences, information, or traits. Return facts separated by | character. If no facts, return exactly 'Empty'.
+
+User message: {userText}
+
+Facts about Tashiro:";
+
+        yield return StartCoroutine(ProcessFactExtraction(userFactPrompt, "user"));
+    }
+
+    private IEnumerator ExtractAIFacts(string aiText)
+    {
+        string aiFactPrompt = $@"Convert this AI response to third-person facts about Kihbbi. Replace 'I' with 'Kihbbi'. Only extract important facts about preferences, information, or traits. Return facts separated by | character. If no facts, return exactly 'Empty'.
+
+AI response: {aiText}
+
+Facts about Kihbbi:";
+
+        yield return StartCoroutine(ProcessFactExtraction(aiFactPrompt, "AI"));
+    }
+
+    private IEnumerator ProcessFactExtraction(string prompt, string source)
+    {
+        // Make background Ollama request for fact extraction
+        var factRequest = new OllamaChatRequest
+        {
+            model = model,
+            stream = false,
+            messages = new List<ChatMessage>
+            {
+                new ChatMessage { role = "system", content = "You extract and convert facts. Be precise. Use | to separate multiple facts. Return 'Empty' if no facts." },
+                new ChatMessage { role = "user", content = prompt }
+            }
+        };
+
+        string json = JsonUtility.ToJson(factRequest);
+
+        using UnityWebRequest req = new UnityWebRequest(ollamaChatUrl, "POST");
+        req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.timeout = 30;
+
+        yield return req.SendWebRequest();
+
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            try
+            {
+                string responseJson = req.downloadHandler.text;
+                var response = JsonUtility.FromJson<OllamaChatResponse>(responseJson);
+                
+                if (response?.message?.content != null)
+                {
+                    string factsText = response.message.content.Trim();
+                    Debug.Log($"[Memory] {source} facts extracted: {factsText}");
+                    
+                    if (!factsText.Equals("Empty", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Split facts by | and send each to your MySQL server
+                        string[] facts = factsText.Split('|', StringSplitOptions.RemoveEmptyEntries);
+                        foreach (string fact in facts)
+                        {
+                            string cleanFact = fact.Trim();
+                            if (!string.IsNullOrWhiteSpace(cleanFact) && cleanFact.Length > 5)
+                            {
+                                StartCoroutine(SaveFactToDatabase(cleanFact));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Debug.Log($"[Memory] No facts found in {source} text");
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[Memory] Error processing {source} fact extraction: {e}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[Memory] {source} fact extraction failed: {req.error}");
+        }
+    }
+
+    [Serializable]
+    public class MemoryData
+    {
+        public string character_name;
+        public string memory_text;
+        public string[] keywords;
+    }
+
+    private IEnumerator SaveFactToDatabase(string factText)
+    {
+        // TODO: Replace with your MySQL API endpoint
+        string apiUrl = "https://your-server.com/api/save-memory";
+        
+        // Create simple keywords from the fact
+        string[] words = factText.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var keywords = words.Where(w => w.Length > 3).Take(4).ToArray();
+
+        var memoryData = new MemoryData
+        {
+            character_name = "Kihbbi", // or determine from fact content
+            memory_text = factText,
+            keywords = keywords
+        };
+
+        string jsonData = JsonUtility.ToJson(memoryData);
+        
+        // Log what we're actually sending
+        Debug.Log($"[Memory] Sending to server: {jsonData}");
+
+        using UnityWebRequest req = new UnityWebRequest(apiUrl, "POST");
+        req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonData));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.timeout = 10;
+
+        yield return req.SendWebRequest();
+
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            Debug.Log($"[Memory] Server response: {req.downloadHandler.text}");
+            Debug.Log($"[Memory] Successfully saved: {factText}");
+        }
+        else
+        {
+            Debug.LogWarning($"[Memory] Failed to save fact: {req.error}");
+            Debug.LogWarning($"[Memory] Response code: {req.responseCode}");
+            Debug.LogWarning($"[Memory] Response text: {req.downloadHandler?.text}");
+        }
     }
 }

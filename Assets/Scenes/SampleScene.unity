@@ -724,6 +724,57 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 800, y: 800}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1098276237
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1098276239}
+  - component: {fileID: 1098276238}
+  m_Layer: 0
+  m_Name: MemoryManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1098276238
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1098276237}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f6789012345678901234ab, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MemoryManager
+  memoryRelativePath: AI/memory.json
+  userName: Tashiro
+  aiCharacterName: Kihbbi
+  useAIFactDetection: 1
+  factConfidenceThreshold: 0.6
+  ollamaClient: {fileID: 1775305454}
+  debugLogs: 1
+--- !u!4 &1098276239
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1098276237}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.99451, y: -0.08643, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1271337598
 GameObject:
   m_ObjectHideFlags: 0
@@ -757,7 +808,7 @@ AudioSource:
   m_Resource: {fileID: 0}
   m_PlayOnAwake: 1
   m_Volume: 1
-  m_Pitch: 1.05
+  m_Pitch: 1.14
   Loop: 0
   Mute: 0
   Spatialize: 0
@@ -869,9 +920,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PiperClient
   ttsUrl: http://127.0.0.1:8011/tts
-  speakerId: 54
-  speechRate: 1.28
-  maxChunkLength: 1000
+  speakerId: 107
+  speechRate: 1.7
+  maxChunkLength: 2000
   maxConcurrentGenerations: 2
   audioSource: {fileID: 1271337599}
   ollama: {fileID: 1775305454}
@@ -1169,6 +1220,7 @@ MonoBehaviour:
   personaRelativePath: AI/persona.json
   memoryRelativePath: AI/memory.json
   sttClient: {fileID: 619394803}
+  memoryManager: {fileID: 0}
   whisperServerManager: {fileID: 619394804}
   whisperBootDelaySeconds: 0.75
   maxHistoryMessages: 12
@@ -1206,4 +1258,5 @@ SceneRoots:
   - {fileID: 1361054070}
   - {fileID: 1271337602}
   - {fileID: 1775305455}
+  - {fileID: 1098276239}
   - {fileID: 792480698}
