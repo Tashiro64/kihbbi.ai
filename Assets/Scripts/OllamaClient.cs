@@ -27,7 +27,11 @@ public class OllamaClient : MonoBehaviour
     public float whisperBootDelaySeconds = 0.75f;
 
     [Header("Chat Memory")]
-    public int maxHistoryMessages = 12;
+    public int maxHistoryMessages = 100;
+    public bool enableMemoryRetrieval = true;
+    public int maxMemoriesToLoad = 50; // Memories to load per message based on keywords
+    public string memoryQueryUrl = "https://tashiroworld.com/api/kihbbi.ai/query-memory.php";
+    public string memorySaveUrl = "https://tashiroworld.com/api/kihbbi.ai/save-memory.php";
 
     [Header("Startup")]
     public bool sendWelcomeOnStart = true;
@@ -71,6 +75,28 @@ public class OllamaClient : MonoBehaviour
         public ChatMessage message;
         public bool done;
         public string error;
+    }
+
+    [Serializable]
+    public class OllamaGenerateRequest
+    {
+        public string model;
+        public string prompt;
+        public bool stream = false;
+        public OllamaOptions options;
+    }
+
+    [Serializable]
+    public class OllamaOptions
+    {
+        public float temperature = 0f;
+    }
+
+    [Serializable]
+    public class OllamaGenerateResponse
+    {
+        public string response;
+        public bool done;
     }
 
     [Serializable]
@@ -146,9 +172,13 @@ public class OllamaClient : MonoBehaviour
         personaJson = File.ReadAllText(path);
     }
 
-    public void BuildInitialSystemMessage()
+    public void BuildInitialSystemMessage(List<string> relevantMemories = null)
     {
-        chatHistory.Clear();
+        string memorySection = "";
+        if (relevantMemories != null && relevantMemories.Count > 0)
+        {
+            memorySection = "\n\nRELEVANT MEMORIES (use if helpful):\n" + string.Join("\n", relevantMemories.Select(m => $"- {m}"));
+        }
 
         string systemPrompt =
 @"CRITICAL RULES:
@@ -161,14 +191,26 @@ public class OllamaClient : MonoBehaviour
 - Output MUST be plain English text ONLY.
 - DO NOT output JSON, markdown, code blocks, or metadata.
 
-PERSONA JSON:
-" + personaJson;
+If the user message is neutral or factual (location, action, observation), respond neutrally or positively. Do NOT use sympathy or problem-solving language unless the user clearly expresses a problem or negative emotion.
 
-        chatHistory.Add(new ChatMessage
+PERSONA JSON:
+" + personaJson + memorySection;
+
+        // Update existing system message or create new one if empty
+        if (chatHistory.Count > 0 && chatHistory[0].role == "system")
         {
-            role = "system",
-            content = systemPrompt
-        });
+            chatHistory[0].content = systemPrompt;
+        }
+        else
+        {
+            // First time setup - clear and add system message
+            chatHistory.Clear();
+            chatHistory.Add(new ChatMessage
+            {
+                role = "system",
+                content = systemPrompt
+            });
+        }
     }
 
     public void ResetConversation()
@@ -256,6 +298,30 @@ PERSONA JSON:
 
         try
         {
+            // Fetch relevant memories on EVERY message (skip for welcome)
+            List<string> relevantMemories = null;
+            if (!isWelcome && enableMemoryRetrieval)
+            {
+                var memoryCoroutine = GetRelevantMemories(userText);
+                yield return memoryCoroutine;
+                relevantMemories = memoryCoroutine.Current as List<string>;
+                
+                // Update system message with current relevant memories
+                if (relevantMemories != null && relevantMemories.Count > 0)
+                {
+                    // Update the system message in chatHistory[0]
+                    BuildInitialSystemMessage(relevantMemories);
+                    Debug.Log($"[Memory] Injected {relevantMemories.Count} relevant memories into system prompt:");
+                    foreach (var mem in relevantMemories)
+                    {
+                        Debug.Log($"  - {mem}");
+                    }
+                    
+                    // Show full system prompt with memories
+                    Debug.Log($"[Memory] FULL SYSTEM PROMPT:\n{chatHistory[0].content}");
+                }
+            }
+
             chatHistory.Add(new ChatMessage { role = "user", content = userText });
             TrimHistory();
 
@@ -266,6 +332,8 @@ PERSONA JSON:
                 messages = chatHistory
             };
 
+            Debug.Log($"[Ollama] Using model: {model}");
+
             string json = JsonUtility.ToJson(reqObj);
             
             if (logRequests)
@@ -274,7 +342,14 @@ PERSONA JSON:
                 Debug.Log($"[Ollama] System message length: {(chatHistory.Count > 0 ? chatHistory[0].content.Length : 0)} characters");
                 if (chatHistory.Count > 0 && chatHistory[0].content.Length > 2000)
                 {
-                    Debug.Log($"[Ollama] System message preview: {chatHistory[0].content.Substring(0, 500)}...");
+                    Debug.Log($"[Ollama] System message preview (first 500 chars): {chatHistory[0].content.Substring(0, 500)}...");
+                    
+                    // Show the LAST 500 chars to see the memories section
+                    int startPos = chatHistory[0].content.Length - 500;
+                    if (startPos > 0)
+                    {
+                        Debug.Log($"[Ollama] System message preview (last 500 chars): ...{chatHistory[0].content.Substring(startPos)}");
+                    }
                 }
             }
 
@@ -393,12 +468,8 @@ PERSONA JSON:
             }
             else
             {
-                // Normal unlock
-                if (lockStt && sttClient != null)
-                {
-                    sttClient.canTalkAgain = true;
-                    sttClient.allowSTTRequests = true;
-                }
+                // Don't re-enable STT immediately - wait for TTS to finish
+                // Will be re-enabled when OnTTSComplete() is called
             }
         }
     }
@@ -571,6 +642,17 @@ PERSONA JSON:
         return "neutral";
     }
 
+    // Call this method when TTS (Piper) finishes playing all sentences
+    public void OnTTSComplete()
+    {
+        if (sttClient != null)
+        {
+            sttClient.canTalkAgain = true;
+            sttClient.allowSTTRequests = true;
+            Debug.Log("[Ollama] TTS complete, re-enabled STT");
+        }
+    }
+
     private IEnumerator ExtractAndSaveFactsBackground(string userText, string aiText)
     {
         Debug.Log("[Memory] Starting background fact extraction...");
@@ -584,45 +666,122 @@ PERSONA JSON:
         yield break; // This method just starts the two separate processes
     }
 
+    private IEnumerator GetRelevantMemories(string userText)
+    {
+        // Common stop words to ignore when extracting keywords
+        var stopWords = new HashSet<string>
+        {
+            "what's","what", "who", "who's", "whose", "when", "where", "which", "whom", "this", "that", "these",
+			"those", "with", "from", "have", "has", "had", "will", "would", "could", "should", "does", "did", "can",
+			"hey", "are", "was", "were", "been", "being", "the", "and", "for", "not", "but", "or", "as", "if", "at",
+			"by", "to", "in", "on", "of", "is", "it", "my", "your", "his", "her", "its", "our", "their", "me", "you",
+			"him", "she", "we", "they", "yes", "no", "do", "so", "an", "a", "im", "i'm", "dont", "don't", "cant", "can't",
+			"just", "like", "get", "got", "go", "got", "see", "know", "think", "think", "say", "said", "tell", "told",
+			"make", "made", "want", "wanted", "need", "needed", "feel", "felt", "good", "bad", "okay", "ok", "really", "very",
+			"also", "too", "much", "little", "some", "any", "more", "most", "other", "such", "only", "own", "same", "even", "ever",
+			"always", "never", "often", "sometimes", "usually", "today", "yesterday", "tomorrow", "now", "then", "here", "there",
+			"kihbbi", "tashiro" // Character names - too broad for keyword matching
+        };
+        
+        // Extract keywords from user text for dynamic memory matching
+        string[] words = userText.ToLower().Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+        var keywords = words
+            .Where(w => w.Length > 2 && !stopWords.Contains(w)) // Length > 2 to catch "pizza", "cat", etc.
+            .Take(10)
+            .ToArray();
+
+        if (keywords.Length == 0)
+        {
+            yield return null;
+            yield break;
+        }
+
+        var queryRequest = new MemoryQueryRequest
+        {
+            keywords = keywords
+        };
+
+        string json = JsonUtility.ToJson(queryRequest);
+        Debug.Log($"[Memory] Querying with keywords: {string.Join(", ", keywords)}");
+
+        using UnityWebRequest req = new UnityWebRequest(memoryQueryUrl, "POST");
+        req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.timeout = 2; // Short timeout to avoid slowdowns
+
+        yield return req.SendWebRequest();
+
+        List<string> memories = new List<string>();
+
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            try
+            {
+                string responseJson = req.downloadHandler.text;
+                var response = JsonUtility.FromJson<MemoryQueryResponse>(responseJson);
+                
+                if (response?.memories != null && response.memories.Length > 0)
+                {
+                    // Load up to maxMemoriesToLoad
+                    int maxMemories = Mathf.Min(response.memories.Length, maxMemoriesToLoad);
+                    for (int i = 0; i < maxMemories; i++)
+                    {
+                        var mem = response.memories[i];
+                        if (!string.IsNullOrWhiteSpace(mem.memory_text))
+                        {
+                            memories.Add(mem.memory_text);
+                        }
+                    }
+                    Debug.Log($"[Memory] Retrieved {memories.Count} relevant memories:");
+                    foreach (var mem in memories)
+                    {
+                        Debug.Log($"  - {mem}");
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[Memory] Failed to parse memory response: {e.Message}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[Memory] Memory query failed: {req.error}");
+        }
+
+        yield return memories.Count > 0 ? memories : null;
+    }
+
     private IEnumerator ExtractUserFacts(string userText)
     {
-        string userFactPrompt = $@"Convert this user message to third-person facts about Tashiro. Replace 'I' with 'Tashiro'. Only extract important facts about preferences, information, or traits. Return facts separated by | character. If no facts, return exactly 'Empty'.
-
-User message: {userText}
-
-Facts about Tashiro:";
+        string userFactPrompt = $"Extract ONLY explicit preferences from 'I love/hate/enjoy/like/dislike' statements. Write without 'I' or names. If no clear preference, respond ONLY 'Empty'.\n\n\"I love pizza\" → \"loves pizza\"\n\"I hate rain\" → \"hates rain\"\n\"sounds like fun\" → \"Empty\"\n\nText: {userText}\n\nFact:";
 
         yield return StartCoroutine(ProcessFactExtraction(userFactPrompt, "user"));
     }
 
     private IEnumerator ExtractAIFacts(string aiText)
     {
-        string aiFactPrompt = $@"Convert this AI response to third-person facts about Kihbbi. Replace 'I' with 'Kihbbi'. Only extract important facts about preferences, information, or traits. Return facts separated by | character. If no facts, return exactly 'Empty'.
-
-AI response: {aiText}
-
-Facts about Kihbbi:";
-
+        string aiFactPrompt = $"Extract ONLY explicit preferences from 'I love/hate/enjoy/like/dislike' statements. Write without 'I' or names. If no clear preference, respond ONLY 'Empty'.\n\n\"I love music\" → \"loves music\"\n\"I enjoy ice cream\" → \"enjoys ice cream\"\n\"Sounds like fun\" → \"Empty\"\n\nText: {aiText}\n\nFact:";
+ 
         yield return StartCoroutine(ProcessFactExtraction(aiFactPrompt, "AI"));
     }
 
     private IEnumerator ProcessFactExtraction(string prompt, string source)
     {
-        // Make background Ollama request for fact extraction
-        var factRequest = new OllamaChatRequest
+        // Use /api/generate with temperature 0 for clean, deterministic fact extraction
+        var factRequest = new OllamaGenerateRequest
         {
             model = model,
+            prompt = prompt,
             stream = false,
-            messages = new List<ChatMessage>
-            {
-                new ChatMessage { role = "system", content = "You extract and convert facts. Be precise. Use | to separate multiple facts. Return 'Empty' if no facts." },
-                new ChatMessage { role = "user", content = prompt }
-            }
+            options = new OllamaOptions { temperature = 0f }
         };
 
         string json = JsonUtility.ToJson(factRequest);
+        string generateUrl = "http://127.0.0.1:11434/api/generate";
 
-        using UnityWebRequest req = new UnityWebRequest(ollamaChatUrl, "POST");
+        using UnityWebRequest req = new UnityWebRequest(generateUrl, "POST");
         req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(json));
         req.downloadHandler = new DownloadHandlerBuffer();
         req.SetRequestHeader("Content-Type", "application/json");
@@ -635,23 +794,36 @@ Facts about Kihbbi:";
             try
             {
                 string responseJson = req.downloadHandler.text;
-                var response = JsonUtility.FromJson<OllamaChatResponse>(responseJson);
+                var response = JsonUtility.FromJson<OllamaGenerateResponse>(responseJson);
                 
-                if (response?.message?.content != null)
+                if (response?.response != null)
                 {
-                    string factsText = response.message.content.Trim();
+                    string factsText = response.response.Trim();
                     Debug.Log($"[Memory] {source} facts extracted: {factsText}");
                     
                     if (!factsText.Equals("Empty", StringComparison.OrdinalIgnoreCase))
                     {
+                        // Determine character name based on source
+                        string characterName = source == "user" ? "Tashiro" : "Kihbbi";
+                        
                         // Split facts by | and send each to your MySQL server
                         string[] facts = factsText.Split('|', StringSplitOptions.RemoveEmptyEntries);
                         foreach (string fact in facts)
                         {
                             string cleanFact = fact.Trim();
-                            if (!string.IsNullOrWhiteSpace(cleanFact) && cleanFact.Length > 5)
+                            
+                            // Remove " Empty" if it appears at the end as a separate word (not part of legitimate text)
+                            if (cleanFact.EndsWith(" Empty", StringComparison.OrdinalIgnoreCase))
                             {
-                                StartCoroutine(SaveFactToDatabase(cleanFact));
+                                cleanFact = cleanFact.Substring(0, cleanFact.Length - 6).Trim();
+                            }
+                            
+                            // Filter out standalone "Empty" and ensure fact is valid
+                            if (!string.IsNullOrWhiteSpace(cleanFact) && 
+                                cleanFact.Length > 5 && 
+                                !cleanFact.Equals("Empty", StringComparison.OrdinalIgnoreCase))
+                            {
+                                StartCoroutine(SaveFactToDatabase(cleanFact, characterName));
                             }
                         }
                     }
@@ -677,23 +849,33 @@ Facts about Kihbbi:";
     {
         public string character_name;
         public string memory_text;
+    }
+
+    [Serializable]
+    public class MemoryQueryRequest
+    {
         public string[] keywords;
     }
 
-    private IEnumerator SaveFactToDatabase(string factText)
+    [Serializable]
+    public class MemoryQueryResponse
     {
-        // TODO: Replace with your MySQL API endpoint
-        string apiUrl = "https://your-server.com/api/save-memory";
-        
-        // Create simple keywords from the fact
-        string[] words = factText.ToLower().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var keywords = words.Where(w => w.Length > 3).Take(4).ToArray();
+        public MemoryItem[] memories;
+    }
 
+    [Serializable]
+    public class MemoryItem
+    {
+        public string character_name;
+        public string memory_text;
+    }
+
+    private IEnumerator SaveFactToDatabase(string factText, string characterName)
+    {
         var memoryData = new MemoryData
         {
-            character_name = "Kihbbi", // or determine from fact content
-            memory_text = factText,
-            keywords = keywords
+            character_name = characterName,
+            memory_text = factText
         };
 
         string jsonData = JsonUtility.ToJson(memoryData);
@@ -701,7 +883,7 @@ Facts about Kihbbi:";
         // Log what we're actually sending
         Debug.Log($"[Memory] Sending to server: {jsonData}");
 
-        using UnityWebRequest req = new UnityWebRequest(apiUrl, "POST");
+        using UnityWebRequest req = new UnityWebRequest(memorySaveUrl, "POST");
         req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonData));
         req.downloadHandler = new DownloadHandlerBuffer();
         req.SetRequestHeader("Content-Type", "application/json");

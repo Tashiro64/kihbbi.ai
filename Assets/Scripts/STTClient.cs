@@ -38,8 +38,10 @@ public class AutoVADSTTClient : MonoBehaviour
     [Header("Debug")]
     public bool showDebugLogs = true;
     public bool showOnScreenStatus = true;
+    public KeyCode toggleKey = KeyCode.F1;  // press F1 to toggle visibility
 
     private string micDevice;
+    // Use shared GUI visibility state from TextChatBox
     private AudioClip micClip;
 
     private const int MIC_BUFFER_SECONDS = 60; // mic recording ring buffer length
@@ -205,6 +207,14 @@ public class AutoVADSTTClient : MonoBehaviour
                 FinalizeAndSendUtterance();
             }
         }
+
+        // Handle F1 toggle for GUI visibility
+        if (Input.GetKeyDown(toggleKey))
+        {
+            TextChatBox.sharedGUIVisible = !TextChatBox.sharedGUIVisible;
+            if (showDebugLogs)
+                Debug.Log($"[STTClient] F1 pressed, GUI visibility: {TextChatBox.sharedGUIVisible}");
+        }
     }
 
     void FinalizeAndSendUtterance()
@@ -328,7 +338,7 @@ public class AutoVADSTTClient : MonoBehaviour
 
     void OnGUI()
     {
-        if (!showOnScreenStatus || !Application.isPlaying) return;
+        if (!showOnScreenStatus || !Application.isPlaying || !TextChatBox.sharedGUIVisible) return;
 
         GUILayout.BeginArea(new Rect(10, 10, 520, 320), GUI.skin.box);
         GUILayout.Label("AutoVAD STT");

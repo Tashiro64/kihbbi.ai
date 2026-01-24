@@ -59,7 +59,7 @@ public class PiperClient : MonoBehaviour
 
         if (audioSource == null)
         {
-            Debug.LogWarning("[Piper] No AudioSource found! Adding one automatically.");
+
             audioSource = gameObject.AddComponent<AudioSource>();
         }
 
@@ -78,7 +78,6 @@ public class PiperClient : MonoBehaviour
             // Ensure the AudioSource GameObject doesn't get destroyed
             if (audioSource.gameObject != this.gameObject)
             {
-                Debug.LogWarning("[Piper] AudioSource is on different GameObject, this might cause issues");
             }
         }
 
@@ -102,8 +101,6 @@ public class PiperClient : MonoBehaviour
     {
         if (!PiperServerManager.PiperReady)
         {
-            if (debugLogs)
-                Debug.Log($"[Piper] Server not ready, ignoring sentence: {sentence}");
             return;
         }
 
@@ -148,8 +145,6 @@ public class PiperClient : MonoBehaviour
             
             if (string.IsNullOrWhiteSpace(cleanedChunk) || cleanedChunk.Length < 2)
             {
-                if (debugLogs)
-                    Debug.Log($"[Piper] Skipping chunk that became empty after cleaning: '{chunk}'");
                 continue;
             }
 
@@ -186,7 +181,6 @@ public class PiperClient : MonoBehaviour
 
             if (wavBytes == null || wavBytes.Length < 44)
             {
-                Debug.LogWarning($"[Piper] Invalid audio data for text '{item.text.Substring(0, Math.Min(item.text.Length, 50))}...': {wavBytes?.Length ?? 0} bytes");
                 return;
             }
 
@@ -194,7 +188,7 @@ public class PiperClient : MonoBehaviour
             bool isValidAudio = IsValidAudioData(wavBytes);
             if (!isValidAudio)
             {
-                Debug.LogWarning($"[Piper] Generated silent/invalid audio for text '{item.text.Substring(0, Math.Min(item.text.Length, 50))}...'");
+
                 return;
             }
 
@@ -202,7 +196,7 @@ public class PiperClient : MonoBehaviour
 
             if (clip == null || clip.length < 0.01f)
             {
-                Debug.LogWarning($"[Piper] Failed to create valid AudioClip for text '{item.text.Substring(0, Math.Min(item.text.Length, 50))}...'");
+
                 return;
             }
 
@@ -210,25 +204,16 @@ public class PiperClient : MonoBehaviour
             {
                 generatedClips[item.seq] = clip;
                 
-                if (debugLogs)
-                    Debug.Log($"[Piper] Generated clip for seq {item.seq}, total clips: {generatedClips.Count}");
-                
                 FlushReadyClips();
-                
-                if (debugLogs)
-                    Debug.Log($"[Piper] Ready queue has {readyToPlayQueue.Count} clips, isPlaying: {isPlaying}");
                 
                 if (!isPlaying && readyToPlayQueue.Count > 0)
                 {
-                    if (debugLogs)
-                        Debug.Log("[Piper] Starting playback queue");
                     StartCoroutine(PlayQueueCoroutine());
                 }
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Debug.LogError($"[Piper] GenerateClipAsync error: {ex}");
         }
         finally
         {
@@ -255,38 +240,27 @@ public class PiperClient : MonoBehaviour
     {            
         isPlaying = true;
         
-        if (debugLogs)
-            Debug.Log($"[Piper] PlayQueue started with {readyToPlayQueue.Count} clips");
-
         while (readyToPlayQueue.Count > 0)
         {
             AudioClip clip = readyToPlayQueue.Dequeue();
             if (clip == null) 
             {
-                if (debugLogs)
-                    Debug.LogWarning("[Piper] Null clip in queue, skipping");
                 continue;
             }
 
             if (audioSource == null)
             {
-                Debug.LogWarning("[Piper] No AudioSource assigned.");
                 break;
             }
 
             // Ensure AudioSource is in good state
             if (audioSource.isPlaying)
             {
-                if (debugLogs)
-                    Debug.LogWarning("[Piper] AudioSource already playing, stopping previous audio");
                 audioSource.Stop();
                 yield return new WaitForEndOfFrame(); // Give it a frame to stop
             }
 
             audioSource.clip = clip;
-            
-            if (debugLogs)
-                Debug.Log($"[Piper] Playing clip: {clip.name}, length: {clip.length:F2}s, samples: {clip.samples}");
             
             audioSource.Play();
 
@@ -305,14 +279,9 @@ public class PiperClient : MonoBehaviour
                 {
                     if (audioSource.time == 0 && audioSource.isPlaying)
                     {
-                        if (debugLogs)
-                            Debug.LogWarning($"[Piper] Audio playback seems stuck at time 0, forcing restart");
                         audioSource.Stop();
                         audioSource.Play();
                     }
-                    
-                    if (debugLogs)
-                        Debug.Log($"[Piper] Playback progress: {audioSource.time:F2}s / {clip.length:F2}s");
                     
                     lastCheckTime = currentTime;
                 }
@@ -320,7 +289,6 @@ public class PiperClient : MonoBehaviour
                 // Check for interruption
                 if (audioSource.clip != clip)
                 {
-                    Debug.LogWarning($"[Piper] Audio clip was changed during playback! Expected: {clip.name}, Current: {audioSource.clip?.name ?? "null"}");
                     playbackInterrupted = true;
                     break;
                 }
@@ -330,44 +298,38 @@ public class PiperClient : MonoBehaviour
             
             if (playbackInterrupted)
             {
-                Debug.LogError("[Piper] Playback was interrupted, stopping queue");
                 break;
             }
             
             if (Time.time - startTime >= timeout)
             {
-                Debug.LogWarning($"[Piper] Audio playback timeout for clip {clip.name} (played for {Time.time - startTime:F2}s, expected {clip.length:F2}s)");
                 audioSource.Stop(); // Force stop on timeout
             }
             
-            if (debugLogs)
-                Debug.Log($"[Piper] Finished playing clip: {clip.name}");
         }
 
         isPlaying = false;
         
-        if (debugLogs)
-            Debug.Log($"[Piper] PlayQueue finished. Pending: {pendingGeneration.Count}, Generated: {generatedClips.Count}");
-        
         // Clean up any remaining clips in ready queue (shouldn't happen but safety check)
         if (readyToPlayQueue.Count > 0)
         {
-            Debug.LogWarning($"[Piper] {readyToPlayQueue.Count} clips still in ready queue after playback finished");
             readyToPlayQueue.Clear();
         }
         
         // Reset when everything is done
         if (pendingGeneration.Count == 0 && generatedClips.Count == 0)
         {
-            if (debugLogs)
-                Debug.Log("[Piper] Resetting sequence counters");
             seqCounter = 0;
             nextPlaySeq = 1;
+            
+            // Notify OllamaClient that TTS is completely finished
+            if (ollama != null)
+            {
+                ollama.OnTTSComplete();
+            }
         }
         else if (pendingGeneration.Count > 0)
         {
-            if (debugLogs)
-                Debug.Log("[Piper] More pending generation, restarting generators");
             TryStartGenerators();
         }
     }
@@ -400,8 +362,6 @@ public class PiperClient : MonoBehaviour
         // Text is already cleaned in Enqueue, but double-check for safety
         if (string.IsNullOrWhiteSpace(text))
         {
-            if (debugLogs)
-                Debug.LogWarning($"[Piper] Empty text passed to PostTTSAsync: '{text}'");
             return null;
         }
         
@@ -431,8 +391,6 @@ public class PiperClient : MonoBehaviour
                     req.SetRequestHeader("Content-Type", "application/json");
                     req.timeout = 15; // 15 second timeout
 
-                    if (debugLogs && retry > 0)
-                        Debug.Log($"[Piper] Retry {retry} for text: '{text.Substring(0, Math.Min(text.Length, 30))}...'");
 
                     var op = req.SendWebRequest();
                     while (!op.isDone)
@@ -443,13 +401,10 @@ public class PiperClient : MonoBehaviour
                         byte[] data = req.downloadHandler.data;
                         if (data != null && data.Length > 44)
                         {
-                            if (debugLogs)
-                                Debug.Log($"[Piper] TTS Success: {data.Length} bytes for '{text.Substring(0, Math.Min(text.Length, 30))}...'");
                             return data;
                         }
                         else
                         {
-                            Debug.LogWarning($"[Piper] Server returned invalid audio data: {data?.Length ?? 0} bytes");
                         }
                     }
                     else
@@ -663,8 +618,6 @@ public class PiperClient : MonoBehaviour
                 
                 if (stuckAudioCounter >= 3) // 3 seconds of stuck audio
                 {
-                    Debug.LogError($"[Piper] Audio playback stuck at time {currentAudioTime:F2}s, forcing restart");
-                    
                     // Try to restart current audio
                     if (audioSource.clip != null)
                     {
@@ -699,15 +652,12 @@ public class PiperClient : MonoBehaviour
     [ContextMenu("Test Piper TTS")]
     public void TestTTS()
     {
-        Debug.Log("[Piper] Manual TTS test started");
         Enqueue("Hello world, this is Piper TTS test.");
     }
     
     [ContextMenu("Emergency Stop Audio")]
     public void EmergencyStopAudio()
     {
-        Debug.Log("[Piper] Emergency stop triggered");
-        
         if (audioSource != null && audioSource.isPlaying)
         {
             audioSource.Stop();
@@ -723,25 +673,10 @@ public class PiperClient : MonoBehaviour
         activeGenerators = 0;
         seqCounter = 0;
         nextPlaySeq = 1;
-        
-        Debug.Log("[Piper] Emergency stop complete - all audio and queues cleared");
     }
     
     [ContextMenu("Debug Queue State")]
     public void DebugQueueState()
     {
-        Debug.Log($"[Piper] Queue State:");
-        Debug.Log($"  - Pending Generation: {pendingGeneration.Count}");
-        Debug.Log($"  - Ready to Play: {readyToPlayQueue.Count}");
-        Debug.Log($"  - Generated Clips: {generatedClips.Count}");
-        Debug.Log($"  - Active Generators: {activeGenerators}");
-        Debug.Log($"  - Is Playing: {isPlaying}");
-        Debug.Log($"  - Seq Counter: {seqCounter}");
-        Debug.Log($"  - Next Play Seq: {nextPlaySeq}");
-        Debug.Log($"  - AudioSource Playing: {(audioSource != null ? audioSource.isPlaying.ToString() : "null")}");
-        if (audioSource != null && audioSource.clip != null)
-        {
-            Debug.Log($"  - Current Clip: {audioSource.clip.name}, Time: {audioSource.time:F2}s / {audioSource.clip.length:F2}s");
-        }
     }
 }

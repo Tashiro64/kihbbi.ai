@@ -9,13 +9,23 @@ public class TextChatBox : MonoBehaviour
     [Header("UI")]
     public bool showUI = true;
     public KeyCode focusKey = KeyCode.T;  // press T to focus typing
+    public KeyCode toggleKey = KeyCode.F1;  // press F1 to toggle visibility
     public int maxChars = 200;
 
     private string input = "";
     private bool hasFocus = false;
+    
+    // Shared GUI visibility state
+    public static bool sharedGUIVisible = false;
 
     void Update()
     {
+        // Handle F1 toggle for GUI visibility
+        if (Input.GetKeyDown(toggleKey))
+        {
+            sharedGUIVisible = !sharedGUIVisible;
+        }
+
         if (Input.GetKeyDown(focusKey))
         {
             hasFocus = true;
@@ -57,7 +67,7 @@ public class TextChatBox : MonoBehaviour
 
     void OnGUI()
     {
-        if (!showUI || !Application.isPlaying) return;
+        if (!showUI || !Application.isPlaying || !sharedGUIVisible) return;
 
         GUILayout.BeginArea(new Rect(10, 320, 520, 140), GUI.skin.box);
         GUILayout.Label("Text Chat (press T to type, Enter to send, Esc to cancel)");

@@ -27,7 +27,6 @@ public class PiperServerManager : MonoBehaviour
     {
         if (proc != null && !proc.HasExited)
         {
-            UnityEngine.Debug.Log("ℹ️ Piper server already running.");
             return;
         }
 
@@ -36,7 +35,6 @@ public class PiperServerManager : MonoBehaviour
 
         if (!File.Exists(serverFile))
         {
-            UnityEngine.Debug.LogError("[Piper] piper_server.py not found: " + serverFile);
             return;
         }
 
@@ -57,12 +55,10 @@ public class PiperServerManager : MonoBehaviour
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
-                UnityEngine.Debug.Log("[Piper] " + e.Data);
                 string lowerData = e.Data.ToLower();
                 if (lowerData.Contains("application startup complete") || lowerData.Contains("uvicorn running on"))
                 {
                     PiperReady = true;
-                    UnityEngine.Debug.Log("✅ Piper server is ready - PiperReady = true");
                 }
             }
         };
@@ -71,12 +67,10 @@ public class PiperServerManager : MonoBehaviour
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
-                UnityEngine.Debug.Log("[Piper ERROR] " + e.Data);
                 string lowerData = e.Data.ToLower();
                 if (lowerData.Contains("application startup complete") || lowerData.Contains("uvicorn running on"))
                 {
                     PiperReady = true;
-                    UnityEngine.Debug.Log("✅ Piper server is ready - PiperReady = true");
                 }
             }
         };
@@ -86,11 +80,9 @@ public class PiperServerManager : MonoBehaviour
             proc.Start();
             proc.BeginOutputReadLine();
             proc.BeginErrorReadLine();
-            UnityEngine.Debug.Log("✅ Piper server process started");
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            UnityEngine.Debug.LogError($"[Piper] Failed to start server: {ex.Message}");
         }
     }
 
@@ -106,7 +98,6 @@ public class PiperServerManager : MonoBehaviour
                 proc = null;
 
                 PiperReady = false;
-                UnityEngine.Debug.Log("🛑 Piper server stopped");
             }
         }
         catch { }
