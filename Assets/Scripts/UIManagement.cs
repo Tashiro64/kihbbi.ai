@@ -7,6 +7,7 @@ public class UIManagement : MonoBehaviour
 
 	public TextMeshProUGUI statusText;
 	public static bool loaded = false;
+	public bool swapOnce = false;
 	
     void Start()
     {
@@ -21,6 +22,11 @@ public class UIManagement : MonoBehaviour
 
     void Update()
     {
+		if(!swapOnce && (PiperServerManager.PiperReady || WhisperServerManager.STTReady)){
+			statusText.text = "Starting Servers";
+			swapOnce = true;
+		}
+		
         if(PiperServerManager.PiperReady && WhisperServerManager.STTReady && !loaded)
         {
             statusText.text = "Everything is ready!";
@@ -31,8 +37,8 @@ public class UIManagement : MonoBehaviour
                 GameObject.Find("/UI/Canvas/logo").SetActive(false);
                 GameObject.Find("/UI/Canvas/text").SetActive(false);
             });
-            
             loaded = true;
+            
         }
     }
 }

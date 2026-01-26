@@ -17,6 +17,11 @@ public class PiperClient : MonoBehaviour
 {
     [Header("Server")]
     public string ttsUrl = "http://127.0.0.1:8011/tts";
+
+	[Header("Playback Timing")]
+	[Tooltip("Delay in seconds between each TTS clip playback")]
+	[Range(0f, 2f)]
+	public float delayBetweenClips = 0.25f;
     
     [Header("Voice Settings")]
     [Tooltip("Speaker ID for libritts_r medium model (0-299). Different voices: Female clear: 5,15,25,45,67,89 | Male clear: 10,30,50,70,90,110")]
@@ -305,6 +310,11 @@ public class PiperClient : MonoBehaviour
             {
                 audioSource.Stop(); // Force stop on timeout
             }
+
+			if (delayBetweenClips > 0f)
+			{
+				yield return new WaitForSeconds(delayBetweenClips);
+			}
             
         }
 

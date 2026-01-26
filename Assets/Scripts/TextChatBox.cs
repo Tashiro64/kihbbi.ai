@@ -58,8 +58,36 @@ public class TextChatBox : MonoBehaviour
 
         Debug.Log("💬 USER: " + input);
 
-        if (ollama != null)
+        // Command detection logic (match STTClient)
+        bool handled = false;
+        if (stt != null)
+        {
+            string normalizedText = stt.NormalizeKihbbiVariations(input);
+            string normLower = normalizedText.ToLower().Trim();
+            string prefixLower = stt.commandPrefix.ToLower();
+            bool isCommand = false;
+            if (normLower == prefixLower || normLower.StartsWith(prefixLower + " "))
+            {
+                isCommand = true;
+            }
+            else if (normLower.StartsWith(prefixLower) && normLower.Length > prefixLower.Length)
+            {
+                char nextChar = normLower[prefixLower.Length];
+                if (!char.IsLetterOrDigit(nextChar))
+                    isCommand = true;
+            }
+            if (isCommand)
+            {
+                Debug.Log($"[TextChatBox] Command detected (prefix '{stt.commandPrefix}'), sending to webhook");
+                stt.StartCoroutine(stt.SendToCommandWebhook(normalizedText));
+                handled = true;
+            }
+        }
+
+        if (!handled && ollama != null)
+        {
             ollama.Ask(input);
+        }
 
         input = "";
         hasFocus = false;

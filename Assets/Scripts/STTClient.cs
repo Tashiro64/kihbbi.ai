@@ -6,11 +6,24 @@ using UnityEngine.Networking;
 
 public class AutoVADSTTClient : MonoBehaviour
 {
+    [Header("TTS")]
+    public PiperClient piperClient;
     [Header("AI")]
     public OllamaClient ollama;
 
     [Header("STT Server")]
     public string sttUrl = "http://127.0.0.1:8007/stt";
+
+    [Header("Command Intercept")]
+    public string commandPrefix = "hey kihbbi";
+    public string commandWebhookUrl = "https://tashiroworld.com/api/kihbbi.ai/ffxivcollect.php";
+    [Tooltip("Phonetic variations of 'kihbbi' that Whisper might transcribe")]
+    public string[] kihbbiVariations = new string[] 
+    { 
+        "kee bee", "kibi", "kibby", "keebi", "keebee", "key bee", 
+        "chi bee", "chibi", "chibby", "chi be", "khibi", "kheebi",
+		"khibby", "kheebee"
+    };
 
     [Header("Microphone")]
     public int selectedMicIndex = 0;
@@ -308,11 +321,135 @@ public class AutoVADSTTClient : MonoBehaviour
 
         if (ollama != null && !string.IsNullOrWhiteSpace(res.text))
         {
+            if (showDebugLogs) Debug.Log("[AutoVAD] Entered post-STT command/casual check block");
             canTalkAgain = false; // 🔒 lock
             allowSTTRequests = false; // 🔒 HARD LOCK until Ollama finishes (Ollama must re-enable!)
 
-            ollama.Ask(res.text);
+            // Normalize phonetic variations of "kihbbi" before checking
+            string normalizedText = NormalizeKihbbiVariations(res.text);
+
+            // Check if text starts with command prefix (allowing for extra text after the prefix)
+            string normLower = normalizedText.ToLower().Trim();
+            string prefixLower = commandPrefix.ToLower();
+            bool isCommand = false;
+            if (showDebugLogs)
+            {
+                Debug.Log($"[AutoVAD] Command check: normLower='{normLower}', prefixLower='{prefixLower}'");
+            }
+            if (normLower == prefixLower || normLower.StartsWith(prefixLower + " "))
+            {
+                isCommand = true;
+                if (showDebugLogs) Debug.Log($"[AutoVAD] Command detected by exact or space match.");
+            }
+            // Also allow for punctuation after prefix (e.g., "hey kihbbi, ...")
+            else if (normLower.StartsWith(prefixLower) && normLower.Length > prefixLower.Length)
+            {
+                char nextChar = normLower[prefixLower.Length];
+                if (!char.IsLetterOrDigit(nextChar))
+                {
+                    isCommand = true;
+                    if (showDebugLogs) Debug.Log($"[AutoVAD] Command detected by punctuation match: nextChar='{nextChar}'");
+                }
+            }
+
+            if (isCommand)
+            {
+                // Command detected, send to webhook instead of chat
+                if (showDebugLogs) Debug.Log($"[AutoVAD] Command detected (prefix '{commandPrefix}'), sending to webhook");
+                StartCoroutine(SendToCommandWebhook(normalizedText));
+            }
+            else
+            {
+                // No command, send to normal chat (use original text, not normalized)
+                if (showDebugLogs) Debug.Log($"[AutoVAD] Not a command, sending to chat. normLower='{normLower}'");
+                ollama.Ask(res.text);
+            }
         }
+    }
+
+    /// <summary>
+    /// Replace phonetic variations of "kihbbi" with "kihbbi" for command detection
+    /// </summary>
+    public string NormalizeKihbbiVariations(string text)
+    {
+        string normalized = text;
+        
+        foreach (string variation in kihbbiVariations)
+        {
+            // Case-insensitive replace
+            normalized = System.Text.RegularExpressions.Regex.Replace(
+                normalized, 
+                variation, 
+                "kihbbi", 
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+            );
+        }
+        
+        return normalized;
+    }
+
+    public IEnumerator SendToCommandWebhook(string text)
+    {
+        Debug.Log($"[Command] Sending to webhook: {text}");
+
+        // Manually enqueue a TTS response using PiperClient
+        if (piperClient != null)
+        {
+            string[] ttsResponses = new string[]
+            {
+                "Okay, let me check that for you.",
+                "Alright, looking that up now.",
+                "Got it! Checking that right now.",
+                "One moment, pulling that information up.",
+                "Let me take a quick look at that."
+            };
+            string chosenTTS = ttsResponses[UnityEngine.Random.Range(0, ttsResponses.Length)];
+            piperClient.Enqueue(chosenTTS);
+        }
+        else
+        {
+            Debug.LogWarning("[Command] PiperClient not assigned, cannot queue TTS.");
+        }
+
+        // Send text as JSON to your server
+        string jsonData = JsonUtility.ToJson(new { text = text });
+
+		//if text contains "mount" add ?action=mount to the URL
+		string urlToUse = commandWebhookUrl;
+		if (text.ToLower().Contains("mount") || text.ToLower().Contains("mounted") || text.ToLower().Contains("mounts") || text.ToLower().Contains("mouth")){
+			urlToUse += "?action=mount";
+		} else if (text.ToLower().Contains("minion") || text.ToLower().Contains("minions") || text.ToLower().Contains("menion") || text.ToLower().Contains("me nion")){
+			urlToUse += "?action=minions";
+		} else if (text.ToLower().Contains("hairstyles") || text.ToLower().Contains("hairstyle") || text.ToLower().Contains("hair styles") || text.ToLower().Contains("hair style") || text.ToLower().Contains("haircut") || text.ToLower().Contains("hair cuts") || text.ToLower().Contains("hair cut")){
+			urlToUse += "?action=hairstyles";
+		} else if (text.ToLower().Contains("emote") || text.ToLower().Contains("emotes") || text.ToLower().Contains("he moats") || text.ToLower().Contains("he moat") || text.ToLower().Contains("hemoat") || text.ToLower().Contains("emoat") || text.ToLower().Contains("e moats")){
+			urlToUse += "?action=emotes";
+		} else if (text.ToLower().Contains("bardings") || text.ToLower().Contains("barding") || text.ToLower().Contains("bard ding") || text.ToLower().Contains("bar dings") || text.ToLower().Contains("bar ding") || text.ToLower().Contains("bard dings") || text.ToLower().Contains("bardin") || text.ToLower().Contains("bar din")){
+			urlToUse += "?action=bardings";
+		}
+
+		urlToUse += "&text=" + UnityWebRequest.EscapeURL(text);
+
+        using UnityWebRequest req = new UnityWebRequest(urlToUse, "POST");
+        req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonData));
+        req.downloadHandler = new DownloadHandlerBuffer();
+        req.SetRequestHeader("Content-Type", "application/json");
+        req.timeout = 10;
+
+        yield return req.SendWebRequest();
+
+        if (req.result == UnityWebRequest.Result.Success)
+        {
+            Debug.Log($"[Command] Webhook response: {req.downloadHandler.text}");
+        }
+        else
+        {
+            Debug.LogWarning($"[Command] Webhook failed: {req.error}");
+        }
+
+        // Re-enable STT after command
+        canTalkAgain = true;
+        allowSTTRequests = true;
     }
 
     float ComputeRMS(float[] samples)

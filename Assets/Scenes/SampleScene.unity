@@ -355,7 +355,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Loading Kihbbi.ai
+  m_text: Loading
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -669,11 +669,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5a7b714ce5687994d9a6480442d51c4f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::STTClient
+  piperClient: {fileID: 1271337601}
   ollama: {fileID: 1775305454}
   sttUrl: http://127.0.0.1:8007/stt
+  commandPrefix: hey kihbbi
+  commandWebhookUrl: https://yourserver.com/command
+  kihbbiVariations:
+  - kee bee
+  - kibi
+  - kibby
+  - keebi
+  - keebee
+  - key bee
+  - chi bee
+  - chibi
+  - chibby
+  - chi be
+  - khibi
+  - kheebi
+  - khibby
+  - kheebee
   selectedMicIndex: 1
   sampleRate: 16000
-  startThreshold: 0.1
+  startThreshold: 0.14
   stopAfterSilenceSeconds: 1.2
   preRollSeconds: 0.35
   maxSpeechSeconds: 20
@@ -809,6 +827,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   statusText: {fileID: 444441817}
+  swapOnce: 0
 --- !u!1 &874765451
 GameObject:
   m_ObjectHideFlags: 0
@@ -892,7 +911,7 @@ AudioSource:
   m_Resource: {fileID: 0}
   m_PlayOnAwake: 1
   m_Volume: 1
-  m_Pitch: 1.14
+  m_Pitch: 1.12
   Loop: 0
   Mute: 0
   Spatialize: 0
@@ -1004,8 +1023,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PiperClient
   ttsUrl: http://127.0.0.1:8011/tts
+  delayBetweenClips: 0.25
   speakerId: 107
-  speechRate: 1.7
+  speechRate: 1.77
   maxChunkLength: 2000
   maxConcurrentGenerations: 2
   audioSource: {fileID: 1271337599}
