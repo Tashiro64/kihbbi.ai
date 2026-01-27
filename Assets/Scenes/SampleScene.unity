@@ -673,7 +673,7 @@ MonoBehaviour:
   ollama: {fileID: 1775305454}
   sttUrl: http://127.0.0.1:8007/stt
   commandPrefix: hey kihbbi
-  commandWebhookUrl: https://yourserver.com/command
+  commandWebhookUrl: https://tashiroworld.com/api/kihbbi.ai/ffxivcollect.php
   kihbbiVariations:
   - kee bee
   - kibi
@@ -1023,7 +1023,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PiperClient
   ttsUrl: http://127.0.0.1:8011/tts
-  delayBetweenClips: 0.25
+  delayBetweenClips: 0.3
   speakerId: 107
   speechRate: 1.77
   maxChunkLength: 2000

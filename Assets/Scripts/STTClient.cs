@@ -397,11 +397,16 @@ public class AutoVADSTTClient : MonoBehaviour
         {
             string[] ttsResponses = new string[]
             {
-                "Okay, let me check that for you.",
-                "Alright, looking that up now.",
-                "Got it! Checking that right now.",
+                "Let me check that for you.",
+                "Looking that up now.",
+                "Checking that right now.",
                 "One moment, pulling that information up.",
-                "Let me take a quick look at that."
+                "Let me take a quick look at that.",
+				"I'll find that information for you.",
+				"Just a second, retrieving that data.",
+				"Hold on, getting that for you.",
+				"I'll look into that right away.",
+				"Give me a moment to find that out."
             };
             string chosenTTS = ttsResponses[UnityEngine.Random.Range(0, ttsResponses.Length)];
             piperClient.Enqueue(chosenTTS);
@@ -417,7 +422,7 @@ public class AutoVADSTTClient : MonoBehaviour
 		//if text contains "mount" add ?action=mount to the URL
 		string urlToUse = commandWebhookUrl;
 		if (text.ToLower().Contains("mount") || text.ToLower().Contains("mounted") || text.ToLower().Contains("mounts") || text.ToLower().Contains("mouth")){
-			urlToUse += "?action=mount";
+			urlToUse += "?action=mounts";
 		} else if (text.ToLower().Contains("minion") || text.ToLower().Contains("minions") || text.ToLower().Contains("menion") || text.ToLower().Contains("me nion")){
 			urlToUse += "?action=minions";
 		} else if (text.ToLower().Contains("hairstyles") || text.ToLower().Contains("hairstyle") || text.ToLower().Contains("hair styles") || text.ToLower().Contains("hair style") || text.ToLower().Contains("haircut") || text.ToLower().Contains("hair cuts") || text.ToLower().Contains("hair cut")){
@@ -430,6 +435,8 @@ public class AutoVADSTTClient : MonoBehaviour
 
 		urlToUse += "&text=" + UnityWebRequest.EscapeURL(text);
 
+		Debug.Log(urlToUse);
+
         using UnityWebRequest req = new UnityWebRequest(urlToUse, "POST");
         req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonData));
         req.downloadHandler = new DownloadHandlerBuffer();
@@ -437,6 +444,17 @@ public class AutoVADSTTClient : MonoBehaviour
         req.timeout = 10;
 
         yield return req.SendWebRequest();
+
+        // Enqueue the exact HTML/text response from the webhook as a Piper TTS
+        string htmlResponse = req.downloadHandler != null ? req.downloadHandler.text : "";
+        if (piperClient != null && !string.IsNullOrEmpty(htmlResponse))
+        {
+            piperClient.Enqueue(htmlResponse);
+        }
+        else if (piperClient == null)
+        {
+            Debug.LogWarning("[Command] PiperClient not assigned, cannot queue HTML TTS.");
+        }
 
         if (req.result == UnityWebRequest.Result.Success)
         {
