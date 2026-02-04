@@ -327,6 +327,7 @@ public class AutoVADSTTClient : MonoBehaviour
 
             // Normalize phonetic variations of "kihbbi" before checking
             string normalizedText = NormalizeKihbbiVariations(res.text);
+			normalizedText = normalizedText.Replace(",", "");
 
             // Check if text starts with command prefix (allowing for extra text after the prefix)
             string normLower = normalizedText.ToLower().Trim();
