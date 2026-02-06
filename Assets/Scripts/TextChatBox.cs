@@ -5,6 +5,7 @@ public class TextChatBox : MonoBehaviour
     [Header("References")]
     public OllamaClient ollama;
     public AutoVADSTTClient stt; // optional (for canTalkAgain)
+    public PiperClient piperClient; // for chat history
 
     [Header("UI")]
     public bool showUI = true;
@@ -86,6 +87,12 @@ public class TextChatBox : MonoBehaviour
 
         if (!handled && ollama != null)
         {
+            // Add user message to chat history
+            if (piperClient != null)
+            {
+                piperClient.AppendUserMessage(input);
+            }
+            
             ollama.Ask(input);
         }
 

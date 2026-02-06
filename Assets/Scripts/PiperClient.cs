@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
+using TMPro;
 
 /*
 SPEAKER I LOVE
@@ -44,13 +45,28 @@ public class PiperClient : MonoBehaviour
     [Header("References")]
     public OllamaClient ollama;
 
+    [Header("Chat History")]
+    [Tooltip("TextMeshPro component to display chat history")]
+    public TextMeshProUGUI chatHistoryText;
+    
+    [Tooltip("Maximum number of lines to keep in chat history. Oldest lines are removed when exceeded.")]
+    public int maxChatHistoryLines = 10;
+
     [Header("Debug")]
     public bool debugLogs = true;
 
+    // Helper struct to pair clips with their sequence numbers
+    private struct ClipWithSeq
+    {
+        public AudioClip clip;
+        public int seq;
+    }
+
     // Internal queue and playback
     private readonly Queue<TTSItem> pendingGeneration = new Queue<TTSItem>();
-    private readonly Queue<AudioClip> readyToPlayQueue = new Queue<AudioClip>();
+    private readonly Queue<ClipWithSeq> readyToPlayQueue = new Queue<ClipWithSeq>();
     private readonly Dictionary<int, AudioClip> generatedClips = new Dictionary<int, AudioClip>();
+    private readonly Dictionary<int, string> originalTextMap = new Dictionary<int, string>(); // Maps seq -> original text before cleaning
     
     private int activeGenerators = 0;
     private bool isPlaying = false;
@@ -153,9 +169,14 @@ public class PiperClient : MonoBehaviour
                 continue;
             }
 
+            int currentSeq = ++seqCounter;
+            
+            // Store original chunk text before cleaning for chat history display
+            originalTextMap[currentSeq] = chunk;
+
             var item = new TTSItem
             {
-                seq = ++seqCounter,
+                seq = currentSeq,
                 text = cleanedChunk // Store the already cleaned text
             };
 
@@ -235,7 +256,7 @@ public class PiperClient : MonoBehaviour
         while (generatedClips.TryGetValue(nextPlaySeq, out AudioClip clip))
         {
             generatedClips.Remove(nextPlaySeq);
-            readyToPlayQueue.Enqueue(clip);
+            readyToPlayQueue.Enqueue(new ClipWithSeq { clip = clip, seq = nextPlaySeq });
             
             nextPlaySeq++;
         }
@@ -247,8 +268,8 @@ public class PiperClient : MonoBehaviour
         
         while (readyToPlayQueue.Count > 0)
         {
-            AudioClip clip = readyToPlayQueue.Dequeue();
-            if (clip == null) 
+            ClipWithSeq clipData = readyToPlayQueue.Dequeue();
+            if (clipData.clip == null) 
             {
                 continue;
             }
@@ -258,6 +279,13 @@ public class PiperClient : MonoBehaviour
                 break;
             }
 
+            // Add text to chat history before playing
+            if (originalTextMap.TryGetValue(clipData.seq, out string originalText))
+            {
+                AppendToChatHistory(originalText);
+                originalTextMap.Remove(clipData.seq); // Clean up to prevent memory leak
+            }
+
             // Ensure AudioSource is in good state
             if (audioSource.isPlaying)
             {
@@ -265,13 +293,13 @@ public class PiperClient : MonoBehaviour
                 yield return new WaitForEndOfFrame(); // Give it a frame to stop
             }
 
-            audioSource.clip = clip;
+            audioSource.clip = clipData.clip;
             
             audioSource.Play();
 
             // Enhanced monitoring during playback
             float startTime = Time.time;
-            float timeout = clip.length + 5f; // Increased timeout
+            float timeout = clipData.clip.length + 5f; // Increased timeout
             float lastCheckTime = startTime;
             bool playbackInterrupted = false;
             
@@ -292,7 +320,7 @@ public class PiperClient : MonoBehaviour
                 }
                 
                 // Check for interruption
-                if (audioSource.clip != clip)
+                if (audioSource.clip != clipData.clip)
                 {
                     playbackInterrupted = true;
                     break;
@@ -342,6 +370,45 @@ public class PiperClient : MonoBehaviour
         {
             TryStartGenerators();
         }
+    }
+
+    private void AppendToChatHistory(string text, string speakerPrefix = "<color=black>Kihbbi:</color>")
+    {
+        if (chatHistoryText == null || string.IsNullOrWhiteSpace(text))
+            return;
+
+        // Add speaker prefix
+        string messageWithPrefix = speakerPrefix + " " + text;
+
+        // Append new text with newline
+        string currentText = chatHistoryText.text;
+        if (string.IsNullOrEmpty(currentText))
+        {
+            chatHistoryText.text = messageWithPrefix;
+        }
+        else
+        {
+            chatHistoryText.text = currentText + "\n" + messageWithPrefix;
+        }
+
+        // Trim to max lines if needed
+        string[] lines = chatHistoryText.text.Split('\n');
+        if (lines.Length > maxChatHistoryLines)
+        {
+            // Remove oldest lines (from the beginning)
+            int linesToRemove = lines.Length - maxChatHistoryLines;
+            string[] remainingLines = new string[maxChatHistoryLines];
+            Array.Copy(lines, linesToRemove, remainingLines, 0, maxChatHistoryLines);
+            chatHistoryText.text = string.Join("\n", remainingLines);
+        }
+    }
+
+    /// <summary>
+    /// Public method to append user messages to chat history
+    /// </summary>
+    public void AppendUserMessage(string text)
+    {
+        AppendToChatHistory(text, "<color=black>Tashiro:</color>");
     }
 
     private string CleanTextForTTS(string text)
@@ -677,6 +744,7 @@ public class PiperClient : MonoBehaviour
         pendingGeneration.Clear();
         readyToPlayQueue.Clear();
         generatedClips.Clear();
+        originalTextMap.Clear();
         
         // Reset state
         isPlaying = false;

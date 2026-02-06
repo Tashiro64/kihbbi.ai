@@ -363,6 +363,13 @@ public class AutoVADSTTClient : MonoBehaviour
             {
                 // No command, send to normal chat (use original text, not normalized)
                 if (showDebugLogs) Debug.Log($"[AutoVAD] Not a command, sending to chat. normLower='{normLower}'");
+                
+                // Add user message to chat history
+                if (piperClient != null)
+                {
+                    piperClient.AppendUserMessage(res.text);
+                }
+                
                 ollama.Ask(res.text);
             }
         }
