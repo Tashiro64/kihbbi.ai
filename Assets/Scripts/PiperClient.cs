@@ -73,6 +73,11 @@ public class PiperClient : MonoBehaviour
     private int seqCounter = 0;
     private int nextPlaySeq = 1; // Start at 1
 
+    /// <summary>
+    /// Returns true if TTS is currently generating or playing audio
+    /// </summary>
+    public bool IsBusy => pendingGeneration.Count > 0 || readyToPlayQueue.Count > 0 || isPlaying || activeGenerators > 0;
+
     void Awake()
     {
         if (audioSource == null)
@@ -372,7 +377,7 @@ public class PiperClient : MonoBehaviour
         }
     }
 
-    private void AppendToChatHistory(string text, string speakerPrefix = "<color=black>Kihbbi:</color>")
+    private void AppendToChatHistory(string text, string speakerPrefix = "<color=#00ccff>Kihbbi:</color>")
     {
         if (chatHistoryText == null || string.IsNullOrWhiteSpace(text))
             return;
@@ -408,7 +413,7 @@ public class PiperClient : MonoBehaviour
     /// </summary>
     public void AppendUserMessage(string text)
     {
-        AppendToChatHistory(text, "<color=black>Tashiro:</color>");
+        AppendToChatHistory(text, "<color=#00ccff>Tashiro:</color>");
     }
 
     private string CleanTextForTTS(string text)

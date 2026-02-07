@@ -8,6 +8,9 @@ public class TimeManagement : MonoBehaviour
     public static string currentLight;
 
     public TextMeshProUGUI timeText;
+    public AIBehaviorManager aiBehaviorManager; // Optional: to notify when time of day changes
+
+    private string previousLight;
 
     void Start()
     {
@@ -16,6 +19,9 @@ public class TimeManagement : MonoBehaviour
             var go = GameObject.Find("UI/Canvas/Time");
             if (go != null) timeText = go.GetComponent<TextMeshProUGUI>();
         }
+        
+        // Initialize previousLight
+        previousLight = currentLight;
     }
 
     void Update()
@@ -34,6 +40,22 @@ public class TimeManagement : MonoBehaviour
 
         // Day/Night from GAME time
         currentLight = (gameHour >= 7 && gameHour < 19) ? "day" : "night";
+
+        // Detect time of day change and update background
+        if (currentLight != previousLight)
+        {
+            Debug.Log($"[TimeManagement] Time of day changed from {previousLight} to {currentLight}");
+            previousLight = currentLight;
+            
+            if (aiBehaviorManager != null)
+            {
+                aiBehaviorManager.RefreshBackground();
+            }
+            else
+            {
+                Debug.LogWarning("[TimeManagement] AIBehaviorManager not assigned, cannot refresh background!");
+            }
+        }
 
         // 12-hour clock display
         int hour12 = gameHour % 12;

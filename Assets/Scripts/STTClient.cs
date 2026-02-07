@@ -10,6 +10,7 @@ public class AutoVADSTTClient : MonoBehaviour
     public PiperClient piperClient;
     [Header("AI")]
     public OllamaClient ollama;
+    public AIBehaviorManager aiBehaviorManager;
 
     [Header("STT Server")]
     public string sttUrl = "http://127.0.0.1:8007/stt";
@@ -65,6 +66,11 @@ public class AutoVADSTTClient : MonoBehaviour
     private float speakingTimer = 0f;
 
     private float lastRms = 0f;
+
+    /// <summary>
+    /// Returns true if the user is currently speaking into the microphone
+    /// </summary>
+    public bool IsSpeaking => isSpeaking;
 
     // Rolling pre-roll buffer
     private Queue<float> preRollQueue = new();
@@ -353,23 +359,105 @@ public class AutoVADSTTClient : MonoBehaviour
                 }
             }
 
+            // Add user message to chat history (for both commands and regular messages)
+            if (piperClient != null)
+            {
+                piperClient.AppendUserMessage(res.text);
+            }
+
             if (isCommand)
             {
-                // Command detected, send to webhook instead of chat
-                if (showDebugLogs) Debug.Log($"[AutoVAD] Command detected (prefix '{commandPrefix}'), sending to webhook");
-                StartCoroutine(SendToCommandWebhook(normalizedText));
+                if (showDebugLogs) Debug.Log($"[AutoVAD] Command text for location check: '{normLower}'");
+                
+                // Check if it's a location/movement command
+                if (normLower.Contains("move") || normLower.Contains("going") || normLower.Contains("go to") || normLower.Contains("go ") || normLower.Contains("let's go") || normLower.Contains("teleport") || normLower.Contains("take me") || normLower.Contains("somewhere else") || normLower.Contains("somewhere"))
+                {
+                    if (showDebugLogs) Debug.Log($"[AutoVAD] Location command detected");
+                    
+                    if (aiBehaviorManager != null)
+                    {
+                        // Normalize location name variations
+                        string normalizedForLocation = NormalizeLocationNames(normLower);
+                        if (showDebugLogs) Debug.Log($"[AutoVAD] After location normalization: '{normalizedForLocation}'");
+                        
+                        // Try to find a specific location in the text
+                        string foundLocation = null;
+                        
+                        if (normalizedForLocation.Contains("home") || normalizedForLocation.Contains("house"))
+                            foundLocation = "house_mist";
+                        else if (normalizedForLocation.Contains("kugane"))
+                            foundLocation = "kugane";
+                        else if (normalizedForLocation.Contains("limsa"))
+                            foundLocation = "limsa_lominsa";
+                        else if (normalizedForLocation.Contains("gridania"))
+                            foundLocation = "new_gridania";
+                        else if (normalizedForLocation.Contains("uldah"))
+                            foundLocation = "uldah";
+                        else if (normalizedForLocation.Contains("gold saucer") || normalizedForLocation.Contains("saucer"))
+                            foundLocation = "gold_saucer";
+                        else if (normalizedForLocation.Contains("eulmore"))
+                            foundLocation = "eulmore";
+                        else if (normalizedForLocation.Contains("solution nine"))
+                            foundLocation = "solution_nine";
+                        else if (normalizedForLocation.Contains("tuliyollal"))
+                            foundLocation = "tuliyollal";
+                        else if (normalizedForLocation.Contains("il mheg"))
+                            foundLocation = "il_mheg";
+                        else if (normalizedForLocation.Contains("lakeland"))
+                            foundLocation = "lakeland";
+                        else if (normalizedForLocation.Contains("shroud"))
+                            foundLocation = "central_shroud";
+                        else if (normalizedForLocation.Contains("la noscea"))
+                            foundLocation = "middle_la_noscea";
+                        else if (normalizedForLocation.Contains("yaktel"))
+                            foundLocation = "yaktel";
+                        
+                        if (foundLocation != null)
+                        {
+                            if (showDebugLogs) Debug.Log($"[AutoVAD] Found location: {foundLocation}");
+                            aiBehaviorManager.ChangeToLocation(foundLocation);
+                        }
+                        else
+                        {
+                            if (showDebugLogs) Debug.Log($"[AutoVAD] No specific location found, teleporting randomly");
+                            aiBehaviorManager.ChangeToRandomLocation();
+                        }
+                        
+                        // Re-enable STT after location command
+                        canTalkAgain = true;
+                        allowSTTRequests = true;
+                    }
+                }
+                else
+                {
+                    // Check if it's a webhook command (mount/minion/etc)
+                    string lowerText = normalizedText.ToLower();
+                    bool isWebhookCommand = lowerText.Contains("mount") || lowerText.Contains("mounted") || lowerText.Contains("mounts") || lowerText.Contains("mouth") ||
+                                           lowerText.Contains("minion") || lowerText.Contains("minions") || lowerText.Contains("menion") || lowerText.Contains("me nion") ||
+                                           lowerText.Contains("hairstyle") || lowerText.Contains("hair style") || lowerText.Contains("haircut") || lowerText.Contains("hair cut") ||
+                                           lowerText.Contains("emote") || lowerText.Contains("emotes") || lowerText.Contains("he moats") || lowerText.Contains("he moat") || lowerText.Contains("hemoat") || lowerText.Contains("emoat") || lowerText.Contains("e moats") ||
+                                           lowerText.Contains("barding") || lowerText.Contains("bardings") || lowerText.Contains("bard ding") || lowerText.Contains("bar dings") || lowerText.Contains("bar ding") || lowerText.Contains("bard dings") || lowerText.Contains("bardin") || lowerText.Contains("bar din");
+                    
+                    if (isWebhookCommand)
+                    {
+                        // Send to webhook for mount/minion/etc
+                        if (showDebugLogs) Debug.Log($"[AutoVAD] Webhook command detected (mount/minion/etc), sending to webhook");
+                        StartCoroutine(SendToCommandWebhook(normalizedText));
+                    }
+                    else
+                    {
+                        // Unknown command, treat as normal chat
+                        if (showDebugLogs) Debug.Log($"[AutoVAD] Unknown command type, treating as normal chat message");
+                        canTalkAgain = true;
+                        allowSTTRequests = true;
+                        ollama.Ask(res.text);
+                    }
+                }
             }
             else
             {
                 // No command, send to normal chat (use original text, not normalized)
                 if (showDebugLogs) Debug.Log($"[AutoVAD] Not a command, sending to chat. normLower='{normLower}'");
-                
-                // Add user message to chat history
-                if (piperClient != null)
-                {
-                    piperClient.AppendUserMessage(res.text);
-                }
-                
                 ollama.Ask(res.text);
             }
         }
@@ -392,6 +480,55 @@ public class AutoVADSTTClient : MonoBehaviour
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase
             );
         }
+        
+        return normalized;
+    }
+    
+    /// <summary>
+    /// Normalize phonetic variations of location names for better recognition
+    /// </summary>
+    public string NormalizeLocationNames(string text)
+    {
+        string normalized = text;
+        
+        // Kugane variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(koogane|kugan|koogan|kugani|coogane|cugane)\b", "kugane", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Limsa variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(limza|lemsa|limsa|leemsa|limza lominsa|lemsa lominsa)\b", "limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Gridania variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gredania|gridanya|greedania|gredanya)\b", "gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Ul'dah variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(uldah|ooldah|ul da|ool dah|ulda)\b", "uldah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Eulmore variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(eulmore|yule more|ule more|eelmore)\b", "eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Tuliyollal variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(tuliyollal|tuli yollal|tulli yollal|tulia lal|toolie lal)\b", "tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Il Mheg variations (already handled but adding more)
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(ill meg|il meg|ill mheg|eel meg|eel mheg)\b", "il mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Lakeland variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lakeland|lake land|lakelend)\b", "lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Solution Nine variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(solution 9|solution nine|solution nine|sulution nine)\b", "solution nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Gold Saucer variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gold saucer|gold sauce er|golden saucer)\b", "gold saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Shroud variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(shroud|shrowd|shrod)\b", "shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // La Noscea variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(la noscea|la no sea|la noshea|la nos sea)\b", "la noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Yak T'el variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(yaktel|yak tel|yak tell|yakk tel)\b", "yaktel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         return normalized;
     }

@@ -51,6 +51,7 @@ public class OllamaClient : MonoBehaviour
 
     // Internals
     private string personaJson = "{}";
+    private string currentLocationContext = "";
     private bool requestInFlight = false;
     private bool welcomeSent = false;
 
@@ -180,6 +181,12 @@ public class OllamaClient : MonoBehaviour
             memorySection = "\n\nRELEVANT MEMORIES (use if helpful):\n" + string.Join("\n", relevantMemories.Select(m => $"- {m}"));
         }
 
+        string locationSection = "";
+        if (!string.IsNullOrWhiteSpace(currentLocationContext))
+        {
+            locationSection = "\n\nCURRENT LOCATION:\n" + currentLocationContext;
+        }
+
         string systemPrompt =
 @"CRITICAL RULES:
 - You are Kihbbi and must ALWAYS respond in-character as Kihbbi in RP style.
@@ -192,6 +199,7 @@ public class OllamaClient : MonoBehaviour
 - DO NOT output JSON, markdown, code blocks, or metadata.
 
 If the user message is neutral or factual (location, action, observation), respond neutrally or positively. Do NOT use sympathy or problem-solving language unless the user clearly expresses a problem or negative emotion.
+" + locationSection + @"
 
 PERSONA JSON:
 " + personaJson + memorySection;
@@ -218,6 +226,20 @@ PERSONA JSON:
         Debug.Log("[Ollama] Resetting conversation...");
         BuildInitialSystemMessage();
         Debug.Log("[Ollama] Conversation reset complete.");
+    }
+
+    /// <summary>
+    /// Update the AI's current location context. This will be injected into the system prompt.
+    /// </summary>
+    public void UpdateLocationContext(string locationDescription)
+    {
+        currentLocationContext = locationDescription;
+        BuildInitialSystemMessage(); // Rebuild system message with new location
+        
+        if (logPersonaLoaded)
+        {
+            Debug.Log($"[Ollama] Location context updated: {locationDescription}");
+        }
     }
 
     [ContextMenu("Force Reset Conversation")]
