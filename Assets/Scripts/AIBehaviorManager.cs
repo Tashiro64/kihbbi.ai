@@ -98,68 +98,68 @@ public class AIBehaviorManager : MonoBehaviour
         locationDescriptions = new Dictionary<string, string>
         {
 			// Central Shroud
-			{ "central_shroud_day", "You are in the Central Shroud during the day. This lush forest area is filled with towering trees and vibrant flora. The sounds of birds and rustling leaves create a peaceful atmosphere. The Bentbranch Meadoes is where lives multiple chocobos and the nearby camps of adventurers add to the lively yet serene environment." },
-			{ "central_shroud_night", "You are in the Central Shroud at night. The forest takes on a mystical quality under the moonlight, with soft glowing lanterns illuminating the paths. The sounds of nocturnal creatures fill the air, and the scent of pine and earth is more pronounced. The Bentbranch Meadoes is where lives multiple chocobos and the INN's warm lights beckon travelers seeking rest." },
+			{ "central_shroud_day", "Kihbbi is in the Central Shroud during the day. This lush forest area is filled with towering trees and vibrant flora. The sounds of birds and rustling leaves create a peaceful atmosphere. The Bentbranch Meadoes is where lives multiple chocobos and the nearby camps of adventurers add to the lively yet serene environment." },
+			{ "central_shroud_night", "Kihbbi is in the Central Shroud at night. The forest takes on a mystical quality under the moonlight, with soft glowing lanterns illuminating the paths. The sounds of nocturnal creatures fill the air, and the scent of pine and earth is more pronounced. The Bentbranch Meadoes is where lives multiple chocobos and the INN's warm lights beckon travelers seeking rest." },
 
 			// Eulmore
-			{ "eulmore_day", "You are in Eulmore during the day. This opulent city is built around a massive crystal and features extravagant architecture. The streets are bustling with wealthy citizens, merchants, and adventurers. The Crystal Tower looms in the distance, and the sound of fountains and music fills the air. The atmosphere is one of luxury and excess." },
-			{ "eulmore_night", "You are in Eulmore at night. The city takes on an even more decadent vibe after dark, with magical lights illuminating the grand architecture. The Crystal Tower glows brilliantly against the night sky. The streets are alive with music and laughter from the taverns, and the scent of fine food and drink wafts through the air." },
+			{ "eulmore_day", "Kihbbi is in Eulmore during the day. This opulent city is built around a massive crystal and features extravagant architecture. The streets are bustling with wealthy citizens, merchants, and adventurers. The Crystal Tower looms in the distance, and the sound of fountains and music fills the air. The atmosphere is one of luxury and excess." },
+			{ "eulmore_night", "Kihbbi is in Eulmore at night. The city takes on an even more decadent vibe after dark, with magical lights illuminating the grand architecture. The Crystal Tower glows brilliantly against the night sky. The streets are alive with music and laughter from the taverns, and the scent of fine food and drink wafts through the air." },
 
 			// Gold Saucer
-			{ "gold_saucer_day", "You are in the Gold Saucer during the day. This sprawling amusement park is filled with colorful attractions, games, and rides. The sounds of laughter, music, and cheering create an energetic atmosphere. The bright colors of the structures and the lively crowds make it feel like a never-ending festival." },
-			{ "gold_saucer_night", "You are in the Gold Saucer at night. The amusement park is illuminated by countless lights, creating a magical and vibrant atmosphere. The sounds of music and laughter continue into the night, and the night sky adds a sense of wonder to the experience. The rides and attractions look even more dazzling under the stars." },
+			{ "gold_saucer_day", "Kihbbi is in the Gold Saucer during the day. This sprawling amusement park is filled with colorful attractions, games, and rides. The sounds of laughter, music, and cheering create an energetic atmosphere. The bright colors of the structures and the lively crowds make it feel like a never-ending festival." },
+			{ "gold_saucer_night", "Kihbbi is in the Gold Saucer at night. The amusement park is illuminated by countless lights, creating a magical and vibrant atmosphere. The sounds of music and laughter continue into the night, and the night sky adds a sense of wonder to the experience. The rides and attractions look even more dazzling under the stars." },
 
 			// Mist (Kihbbi's Home)
-			{ "house_mist_day", "You are in Mist during the day. This residential area is where you live and you are in front of your house. Surrounded by quaint houses and the sounds of daily life. The nearby market is active with locals going about their day. The atmosphere is cozy and familiar, with a strong sense of community." },
-			{ "house_mist_night", "You are in Mist at night. This residential area is where you live and you are in front of your house. The neighborhood is quiet and peaceful under the moonlight, with soft glowing street lamps illuminating the paths. The sounds of crickets and distant conversations create a calming ambiance. The stars above add to the tranquil feeling of home." },
+			{ "house_mist_day", "Kihbbi is in Mist during the day. This residential area is where Kihbbi lives and is in front of their house. Surrounded by quaint houses and the sounds of daily life. The nearby market is active with locals going about their day. The atmosphere is cozy and familiar, with a strong sense of community." },
+			{ "house_mist_night", "Kihbbi is in Mist at night. This residential area is where Kihbbi lives and is in front of their house. The neighborhood is quiet and peaceful under the moonlight, with soft glowing street lamps illuminating the paths. The sounds of crickets and distant conversations create a calming ambiance. The stars above add to the tranquil feeling of home." },
 
 			// Il Mheg
-			{ "il_mheg_day", "You are in Il Mheg during the day. This whimsical forest realm is home to the fae and is filled with vibrant colors and magical flora. The sounds of laughter and music from the fae can be heard, and the air is thick with enchantment. The scenery is constantly shifting, creating a sense of wonder and unpredictability." },
-			{ "il_mheg_night", "You are in Il Mheg at night. The whimsical forest realm takes on an even more magical quality under the moonlight. The colors become more vibrant, and the sounds of the fae and nocturnal creatures create an enchanting atmosphere. The air feels charged with magic, and the shifting scenery adds to the sense of wonder." },
+			{ "il_mheg_day", "Kihbbi is in Il Mheg during the day. This whimsical forest realm is home to the fae and is filled with vibrant colors and magical flora. The sounds of laughter and music from the fae can be heard, and the air is thick with enchantment. The scenery is constantly shifting, creating a sense of wonder and unpredictability." },
+			{ "il_mheg_night", "Kihbbi is in Il Mheg at night. The whimsical forest realm takes on an even more magical quality under the moonlight. The colors become more vibrant, and the sounds of the fae and nocturnal creatures create an enchanting atmosphere. The air feels charged with magic, and the shifting scenery adds to the sense of wonder." },
             
             // Kugane
-            { "kugane_day", "You are in Kugane during the day. This beautiful Far Eastern port city showcases stunning architecture with its pagodas and bridges. The Shiokaze Hostelry, the markets, and the Ruby Bazaar are active with traders from across the sea. Cherry blossoms drift on the breeze, and you can see the ocean stretching to the horizon. The city blends traditional elegance with commercial prosperity." },
-            { "kugane_night", "You are in Kugane at night. The port city is illuminated by countless paper lanterns creating a magical atmosphere. The architecture looks even more striking under the moonlight. The Shiokaze Hostelry's warm lights beckon travelers. The sound of shamisen music drifts from taverns, and the cool sea breeze carries the scent of salt and night-blooming flowers." },
+            { "kugane_day", "Kihbbi is in Kugane during the day. This beautiful Far Eastern port city showcases stunning architecture with its pagodas and bridges. The Shiokaze Hostelry, the markets, and the Ruby Bazaar are active with traders from across the sea. Cherry blossoms drift on the breeze, and Kihbbi can see the ocean stretching to the horizon. The city blends traditional elegance with commercial prosperity." },
+            { "kugane_night", "Kihbbi is in Kugane at night. The port city is illuminated by countless paper lanterns creating a magical atmosphere. The architecture looks even more striking under the moonlight. The Shiokaze Hostelry's warm lights beckon travelers. The sound of shamisen music drifts from taverns, and the cool sea breeze carries the scent of salt and night-blooming flowers." },
 
 			//Lake Land
-			{ "lakeland_day", "You are in Lakeland during the day. This serene area is centered around a large lake with small islands and bridges. The sounds of water lapping and birds singing create a peaceful atmosphere. The architecture is elegant and blends harmoniously with nature. The purple trees are in full bloom. Adventurers can be seen fishing or relaxing by the water's edge." },
-			{ "lakeland_night", "You are in Lakeland at night. The tranquil area takes on a dreamy quality under the moonlight, with soft glowing lanterns illuminating the paths and reflecting on the water. The sounds of nocturnal creatures and gentle waves create a calming ambiance. The purple trees are in full bloom. The stars above add to the magical feeling of this lakeside retreat." },
+			{ "lakeland_day", "Kihbbi is in Lakeland during the day. This serene area is centered around a large lake with small islands and bridges. The sounds of water lapping and birds singing create a peaceful atmosphere. The architecture is elegant and blends harmoniously with nature. The purple trees are in full bloom. Adventurers can be seen fishing or relaxing by the water's edge." },
+			{ "lakeland_night", "Kihbbi is in Lakeland at night. The tranquil area takes on a dreamy quality under the moonlight, with soft glowing lanterns illuminating the paths and reflecting on the water. The sounds of nocturnal creatures and gentle waves create a calming ambiance. The purple trees are in full bloom. The stars above add to the magical feeling of this lakeside retreat." },
 
             // Limsa Lominsa
-            { "limsa_lominsa_day", "You are in Limsa Lominsa Lower Decks during the day. This bustling port city is the maritime heart of Eorzea. The area features the Drowning Wench tavern, the Arcanists' Guild, and the Adventurers' Guild. The salty sea air and sounds of sailors fill the atmosphere. The sun reflects off the water, and merchants hawk their wares along the docks." },
-            { "limsa_lominsa_night", "You are in Limsa Lominsa Lower Decks at night. The port city takes on a different character after dark - lanterns light the walkways, the taverns are lively with song and drink, and the gentle lapping of waves against the docks creates a peaceful ambiance. The Drowning Wench is particularly active with patrons sharing tales of their adventures." },
+            { "limsa_lominsa_day", "Kihbbi is in Limsa Lominsa Lower Decks during the day. This bustling port city is the maritime heart of Eorzea. The area features the Drowning Wench tavern, the Arcanists' Guild, and the Adventurers' Guild. The salty sea air and sounds of sailors fill the atmosphere. The sun reflects off the water, and merchants hawk their wares along the docks." },
+            { "limsa_lominsa_night", "Kihbbi is in Limsa Lominsa Lower Decks at night. The port city takes on a different character after dark - lanterns light the walkways, the taverns are lively with song and drink, and the gentle lapping of waves against the docks creates a peaceful ambiance. The Drowning Wench is particularly active with patrons sharing tales of their adventures." },
 
 			// Limsa Lominsa Upper Decks
-			{ "limsa_lominsa_upper_deck_day", "You are in Limsa Lominsa Upper Decks during the day. This area of the port city is more upscale, with elegant architecture and a bustling market. The sounds of merchants and shoppers fill the air, along with the salty sea breeze. The Arcanists' Guild stands prominently, and you can see ships coming and going from the harbor. Hundreds of adventurers are regrouped around the central Aetheryte to talk and have a great moment." },
-			{ "limsa_lominsa_upper_deck_night", "You are in Limsa Lominsa Upper Decks at night. The area is illuminated by lanterns, creating a warm and inviting atmosphere. The market is quieter but still active with late-night vendors. The Arcanists' Guild glows softly, and the sound of waves and distant music from the Drowning Wench adds to the ambiance. Hundreds of adventurers are regrouped around the central Aetheryte to talk and have a great moment." },
+			{ "limsa_lominsa_upper_deck_day", "Kihbbi is in Limsa Lominsa Upper Decks during the day. This area of the port city is more upscale, with elegant architecture and a bustling market. The sounds of merchants and shoppers fill the air, along with the salty sea breeze. The Arcanists' Guild stands prominently, and Kihbbi can see ships coming and going from the harbor. Hundreds of adventurers are regrouped around the central Aetheryte to talk and have a great moment." },
+			{ "limsa_lominsa_upper_deck_night", "Kihbbi is in Limsa Lominsa Upper Decks at night. The area is illuminated by lanterns, creating a warm and inviting atmosphere. The market is quieter but still active with late-night vendors. The Arcanists' Guild glows softly, and the sound of waves and distant music from the Drowning Wench adds to the ambiance. Hundreds of adventurers are regrouped around the central Aetheryte to talk and have a great moment." },
             
 			// Middle La Noscea
-			{ "middle_la_noscea_day", "You are in Middle La Noscea during the day. This coastal area features a mix of rocky shores and sandy beaches. The sounds of waves crashing and seagulls create a lively atmosphere. The architecture is rustic and blends with the natural surroundings. Adventurers can be seen fishing, relaxing on the beach, or exploring the nearby caves." },
-			{ "middle_la_noscea_night", "You are in Middle La Noscea at night. The coastal area takes on a serene quality under the moonlight, with the sound of gentle waves and distant nocturnal creatures creating a calming ambiance. The rustic architecture is silhouetted against the night sky, and the stars reflect on the water's surface. The beach is quiet, with only a few adventurers enjoying the peaceful night." },
+			{ "middle_la_noscea_day", "Kihbbi is in Middle La Noscea during the day. This coastal area features a mix of rocky shores and sandy beaches. The sounds of waves crashing and seagulls create a lively atmosphere. The architecture is rustic and blends with the natural surroundings. Adventurers can be seen fishing, relaxing on the beach, or exploring the nearby caves." },
+			{ "middle_la_noscea_night", "Kihbbi is in Middle La Noscea at night. The coastal area takes on a serene quality under the moonlight, with the sound of gentle waves and distant nocturnal creatures creating a calming ambiance. The rustic architecture is silhouetted against the night sky, and the stars reflect on the water's surface. The beach is quiet, with only a few adventurers enjoying the peaceful night." },
 
 			// New Gridania
-			{ "new_gridania_day", "You are in New Gridania during the day. This vibrant city is built around the central Aetheryte Plaza, surrounded by shops, taverns, and the bustling market. The sounds of merchants, adventurers, and nature blend together to create a lively atmosphere. The architecture is a mix of wood and stone, with greenery integrated throughout. The city feels alive and welcoming." },
-			{ "new_gridania_night", "You are in New Gridania at night. The city takes on a magical quality under the moonlight, with lanterns illuminating the Aetheryte Plaza and surrounding areas. The sounds of nocturnal creatures mix with the quieter activity of late-night merchants and adventurers. The architecture looks even more enchanting at night, and the overall atmosphere is cozy and mystical." },
+			{ "new_gridania_day", "Kihbbi is in New Gridania during the day. Kihbbi is standing in The Roost INN. This vibrant city is built around the central Aetheryte Plaza, surrounded by shops, taverns, and the bustling market. The sounds of merchants, adventurers, and nature blend together to create a lively atmosphere. The architecture is a mix of wood and stone, with greenery integrated throughout. The city feels alive and welcoming." },
+			{ "new_gridania_night", "Kihbbi is in New Gridania at night. Kihbbi is standing in The Roost INN. The city takes on a magical quality under the moonlight, with lanterns illuminating the Aetheryte Plaza and surrounding areas. The sounds of nocturnal creatures mix with the quieter activity of late-night merchants and adventurers. The architecture looks even more enchanting at night, and the overall atmosphere is cozy and mystical." },
 
             // Old Gridania
-            { "old_gridania_day", "You are in Old Gridania during the day. This ancient forest city is built among the great trees of the Black Shroud. The Amphitheatre stands prominently here, where important gatherings take place. The Botanists' Guild and Conjurers' Guild are nearby. Sunlight filters through the leaves creating dappled patterns on the wooden walkways. You can hear birds singing and the rustling of leaves." },
-            { "old_gridania_night", "You are in Old Gridania at night. The forest city is peaceful under the moonlight, with soft glowing lanterns illuminating the wooden pathways. The Amphitheatre sits quiet and majestic. Nocturnal creatures of the forest can be heard, and the air is cool and fresh with the scent of pine and earth. The city feels mystical and serene." },
+            { "old_gridania_day", "Kihbbi is in Old Gridania during the day. This ancient forest city is built among the great trees of the Black Shroud. The Amphitheatre stands prominently here, where important gatherings take place. The Botanists' Guild and Conjurers' Guild are nearby. Sunlight filters through the leaves creating dappled patterns on the wooden walkways. You can hear birds singing and the rustling of leaves." },
+            { "old_gridania_night", "Kihbbi is in Old Gridania at night. The forest city is peaceful under the moonlight, with soft glowing lanterns illuminating the wooden pathways. The Amphitheatre sits quiet and majestic. Nocturnal creatures of the forest can be heard, and the air is cool and fresh with the scent of pine and earth. The city feels mystical and serene." },
 
 			// Solution Nine
-			{ "solution_nine_day", "You are in Solution Nine during the day. This mysterious city is a massive, ultra-modern city, built with advanced technology and towering megastructures, it feels more like a cyber-futuristic metropolis than a medieval city, complete with neon lighting, sleek architecture, and artificial systems integrated into everyday life. Visually, it’s clean, imposing, and slightly unsettling—beautiful in its precision, but carrying an underlying sense of control and mystery." },
-			{ "solution_nine_night", "You are in Solution Nine at night. This mysterious city transforms into a neon-lit wonderland, with glowing signs and holographic displays illuminating the streets. The hum of technology and distant sounds of nightlife create an energetic yet enigmatic atmosphere. The sleek architecture reflects the vibrant lights, and the city feels alive with possibilities and secrets." },
+			{ "solution_nine_day", "Kihbbi is in Solution Nine during the day. This mysterious city is a massive, ultra-modern city, built with advanced technology and towering megastructures, it feels more like a cyber-futuristic metropolis than a medieval city, complete with neon lighting, sleek architecture, and artificial systems integrated into everyday life. Visually, it’s clean, imposing, and slightly unsettling—beautiful in its precision, but carrying an underlying sense of control and mystery." },
+			{ "solution_nine_night", "Kihbbi is in Solution Nine at night. This mysterious city transforms into a neon-lit wonderland, with glowing signs and holographic displays illuminating the streets. The hum of technology and distant sounds of nightlife create an energetic yet enigmatic atmosphere. The sleek architecture reflects the vibrant lights, and the city feels alive with possibilities and secrets." },
             
 			//Tuliyollal
-			{ "tuliyollal_day", "You are in Tuliyollal during the day. This city is built within a massive tree and features intricate wooden architecture. The sounds of nature blend with the quiet activity of the inhabitants. The city has a peaceful and secluded atmosphere, with sunlight filtering through the leaves creating a serene environment." },
-			{ "tuliyollal_night", "You are in Tuliyollal at night. The city takes on a mystical quality under the moonlight, with soft glowing lanterns illuminating the wooden structures. The sounds of nocturnal creatures mix with the quiet activity of the inhabitants. The overall atmosphere is tranquil and enchanting, with a strong connection to nature." },
+			{ "tuliyollal_day", "Kihbbi is in Tuliyollal during the day. This city is built within a massive tree and features intricate wooden architecture. The sounds of nature blend with the quiet activity of the inhabitants. The city has a peaceful and secluded atmosphere, with sunlight filtering through the leaves creating a serene environment." },
+			{ "tuliyollal_night", "Kihbbi is in Tuliyollal at night. The city takes on a mystical quality under the moonlight, with soft glowing lanterns illuminating the wooden structures. The sounds of nocturnal creatures mix with the quiet activity of the inhabitants. The overall atmosphere is tranquil and enchanting, with a strong connection to nature." },
 
             // Ul'dah
-            { "uldah_day", "You are in Ul'dah - Steps of Nald during the day. This wealthy desert city-state gleams under the harsh sun. The grand architecture reflects the city's prosperity from trade and gladiatorial combat. The Thaumaturges' Guild, the Quicksand tavern, and various merchant stalls surround you. The heat is intense, and sand occasionally blows through the streets. The atmosphere is bustling with commerce and ambition." },
-            { "uldah_night", "You are in Ul'dah - Steps of Nald at night. The desert city cools down after sunset, and the streets take on a mysterious quality. Torches and magical lights illuminate the golden architecture. The Quicksand tavern is alive with music and chatter. The wealthy elite and common folk alike navigate the streets, and the night air carries the scent of exotic spices." },
+            { "uldah_day", "Kihbbi is in Ul'dah - Steps of Nald during the day. This wealthy desert city-state gleams under the harsh sun. The grand architecture reflects the city's prosperity from trade and gladiatorial combat. The Thaumaturges' Guild, the Quicksand tavern, and various merchant stalls surround Kihbbi. The heat is intense, and sand occasionally blows through the streets. The atmosphere is bustling with commerce and ambition." },
+            { "uldah_night", "Kihbbi is in Ul'dah - Steps of Nald at night. The desert city cools down after sunset, and the streets take on a mysterious quality. Torches and magical lights illuminate the golden architecture. The Quicksand tavern is alive with music and chatter. The wealthy elite and common folk alike navigate the streets, and the night air carries the scent of exotic spices." },
 
 			//Yak Tel
-			{ "yaktel_day", "You are in Yak-Tel during the day. This forest is built into a massive cavern and features a unique blend of natural rock formations and constructed buildings. The atmosphere is serene and otherworldly, with the sound of dripping water and distant echoes creating a calming ambiance. The architecture is a mix of stone and wood, blending harmoniously with the cavern environment." },
-			{ "yaktel_night", "You are in Yak-Tel at night. The forest takes on an even more mystical quality under the moonlight, with soft glowing lanterns illuminating the cavern. The sounds of nocturnal creatures and dripping water create a serene ambiance. The architecture looks even more enchanting at night, and the overall atmosphere is tranquil and magical." },
+			{ "yaktel_day", "Kihbbi is in Yak-Tel during the day. This forest is built into a massive cavern and features a unique blend of natural rock formations and constructed buildings. The atmosphere is serene and otherworldly, with the sound of dripping water and distant echoes creating a calming ambiance. The architecture is a mix of stone and wood, blending harmoniously with the cavern environment." },
+			{ "yaktel_night", "Kihbbi is in Yak-Tel at night. The forest takes on an even more mystical quality under the moonlight, with soft glowing lanterns illuminating the cavern. The sounds of nocturnal creatures and dripping water create a serene ambiance. The architecture looks even more enchanting at night, and the overall atmosphere is tranquil and magical." },
         };
     }
     
@@ -281,11 +281,30 @@ public class AIBehaviorManager : MonoBehaviour
         // Update location display text
         UpdateLocationDisplay();
         
+        // Add explicit location confirmation to conversation history
+        if (ollamaClient != null && locationDisplayNames.TryGetValue(currentLocation, out string displayName))
+        {
+            string locationStatement = $"*arrives in {displayName}*";
+            ollamaClient.AddAssistantMessageToHistory(locationStatement);
+            
+            // Also add to UI chat log
+            if (piperClient != null)
+            {
+                piperClient.AppendSystemMessage($"<color=orange>Kihbbi arrives in {displayName}</color>");
+            }
+        }
+        
         // Say something
         if (piperClient != null && locationChangeMessages.Length > 0)
         {
             string message = locationChangeMessages[Random.Range(0, locationChangeMessages.Length)];
             piperClient.Enqueue(message);
+            
+            // Add message to AI conversation history so it remembers saying it
+            if (ollamaClient != null)
+            {
+                ollamaClient.AddAssistantMessageToHistory(message);
+            }
             
             if (showDebugLogs)
                 Debug.Log($"[AIBehavior] Saying: {message}");
@@ -309,11 +328,36 @@ public class AIBehaviorManager : MonoBehaviour
         UpdateLocationContext();
         UpdateLocationDisplay();
         
+        // Add explicit location confirmation to conversation history
+        if (ollamaClient != null && locationDisplayNames.TryGetValue(locationKey, out string displayName))
+        {
+            string locationStatement = $"*arrives in {displayName}*";
+            ollamaClient.AddAssistantMessageToHistory(locationStatement);
+            
+            // Also add to UI chat log
+            if (piperClient != null)
+            {
+                if (showDebugLogs)
+                    Debug.Log($"[AIBehavior] ChangeToLocation: Calling AppendSystemMessage for {displayName}");
+                piperClient.AppendSystemMessage($"<color=orange>Kihbbi arrives in {displayName}</color>");
+            }
+            else
+            {
+                Debug.LogError($"[AIBehavior] ChangeToLocation: piperClient is NULL!");
+            }
+        }
+        
         // Say a random response
         if (piperClient != null && locationCommandResponses.Length > 0)
         {
             string response = locationCommandResponses[Random.Range(0, locationCommandResponses.Length)];
             piperClient.Enqueue(response);
+            
+            // Add response to AI conversation history so it remembers saying it
+            if (ollamaClient != null)
+            {
+                ollamaClient.AddAssistantMessageToHistory(response);
+            }
         }
     }
     
@@ -336,11 +380,36 @@ public class AIBehaviorManager : MonoBehaviour
         UpdateLocationContext();
         UpdateLocationDisplay();
         
+        // Add explicit location confirmation to conversation history
+        if (ollamaClient != null && locationDisplayNames.TryGetValue(currentLocation, out string displayName))
+        {
+            string locationStatement = $"*arrives in {displayName}*";
+            ollamaClient.AddAssistantMessageToHistory(locationStatement);
+            
+            // Also add to UI chat log
+            if (piperClient != null)
+            {
+                if (showDebugLogs)
+                    Debug.Log($"[AIBehavior] ChangeToRandomLocation: Calling AppendSystemMessage for {displayName}");
+                piperClient.AppendSystemMessage($"<color=orange>Kihbbi arrives in {displayName}</color>");
+            }
+            else
+            {
+                Debug.LogError($"[AIBehavior] ChangeToRandomLocation: piperClient is NULL!");
+            }
+        }
+        
         // Say a random response
         if (piperClient != null && locationCommandResponses.Length > 0)
         {
             string response = locationCommandResponses[Random.Range(0, locationCommandResponses.Length)];
             piperClient.Enqueue(response);
+            
+            // Add response to AI conversation history so it remembers saying it
+            if (ollamaClient != null)
+            {
+                ollamaClient.AddAssistantMessageToHistory(response);
+            }
         }
     }
     

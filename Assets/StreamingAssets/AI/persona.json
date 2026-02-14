@@ -2,12 +2,17 @@
 	
   "user": {
     "name": "Tashiro",
-    "language_preference": "fr/en",
+    "language_preference": "english",
     "country": "Canada",
-    "likes": ["Final Fantasy XIV", "Heavy Music"],
+    "likes": ["Final Fantasy XIV", "Heavy Music", "Programming", "Anime" ],
     "ffxiv": {
       "jobs": [ "Ninja", "White Mage" ]
-    }
+    },
+	"things_to_know": [
+		"Tashiro created Kihbbi.AI.",
+		"Tashiro has a Youtube and Twitch channel.",
+		"Tashiro i"
+	]
   },
   
   "assistant": {

@@ -153,6 +153,8 @@ public class PiperClient : MonoBehaviour
 
     public void Enqueue(string text)
     {
+        Debug.Log($"[Piper] 📥 Enqueue called with text: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...' at time {Time.time}");
+        
         if (string.IsNullOrWhiteSpace(text))
             return;
 
@@ -270,6 +272,7 @@ public class PiperClient : MonoBehaviour
     private System.Collections.IEnumerator PlayQueueCoroutine()
     {            
         isPlaying = true;
+        Debug.Log($"[Piper] ▶️ PLAYBACK STARTED - IsBusy={IsBusy} at time {Time.time}");
         
         while (readyToPlayQueue.Count > 0)
         {
@@ -414,6 +417,50 @@ public class PiperClient : MonoBehaviour
     public void AppendUserMessage(string text)
     {
         AppendToChatHistory(text, "<color=#00ccff>Tashiro:</color>");
+    }
+    
+    /// <summary>
+    /// Public method to append system messages (like location changes) to chat history.
+    /// System messages are displayed exactly as provided without any prefix or modification.
+    /// </summary>
+    public void AppendSystemMessage(string text)
+    {
+        Debug.Log($"[PiperClient] AppendSystemMessage called with: {text}");
+        
+        if (chatHistoryText == null)
+        {
+            Debug.LogError("[PiperClient] AppendSystemMessage: chatHistoryText is NULL!");
+            return;
+        }
+        
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            Debug.LogWarning("[PiperClient] AppendSystemMessage: text is null or whitespace!");
+            return;
+        }
+
+        Debug.Log("[PiperClient] AppendSystemMessage: Adding to chat UI");
+        
+        // Append system message directly without any prefix or modification
+        string currentText = chatHistoryText.text;
+        if (string.IsNullOrEmpty(currentText))
+        {
+            chatHistoryText.text = text;
+        }
+        else
+        {
+            chatHistoryText.text = currentText + "\n" + text;
+        }
+
+        // Trim to max lines if needed
+        string[] lines = chatHistoryText.text.Split('\n');
+        if (lines.Length > maxChatHistoryLines)
+        {
+            int linesToRemove = lines.Length - maxChatHistoryLines;
+            string[] remainingLines = new string[maxChatHistoryLines];
+            Array.Copy(lines, linesToRemove, remainingLines, 0, maxChatHistoryLines);
+            chatHistoryText.text = string.Join("\n", remainingLines);
+        }
     }
 
     private string CleanTextForTTS(string text)

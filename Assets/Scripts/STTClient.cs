@@ -156,6 +156,25 @@ public class AutoVADSTTClient : MonoBehaviour
         // Always feed pre-roll buffer
         PushPreRoll(chunk);
 
+        // Check if Left Ctrl is being held - if so, pause microphone processing
+        if (Input.GetKey(KeyCode.LeftControl))
+        {
+            // If we were speaking, stop the current utterance
+            if (isSpeaking)
+            {
+                if (showDebugLogs)
+                    Debug.Log("[AutoVAD] 🚫 Left Ctrl held - stopping current speech");
+                
+                isSpeaking = false;
+                silenceTimer = 0f;
+                speakingTimer = 0f;
+                utterance.Clear();
+            }
+            
+            // Don't process any speech detection while Ctrl is held
+            return;
+        }
+
         // Speech state machine
         if (!isSpeaking)
         {
@@ -333,7 +352,34 @@ public class AutoVADSTTClient : MonoBehaviour
 
             // Normalize phonetic variations of "kihbbi" before checking
             string normalizedText = NormalizeKihbbiVariations(res.text);
+			
+			if (showDebugLogs)
+                Debug.Log($"[AutoVAD] Before command prefix fixes: '{normalizedText}'");
+			
+			// Fix common STT errors for "hey kihbbi" command prefix - use word boundaries for better matching
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA key B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bEi que bi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Ki B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Ki B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAy kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA KB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAQB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAKB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\.kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			
 			normalizedText = normalizedText.Replace(",", "");
+			
+			// Normalize location names for better display in chat log
+			normalizedText = NormalizeLocationNames(normalizedText);
+			
+			if (showDebugLogs)
+                Debug.Log($"[AutoVAD] After all normalizations: '{normalizedText}'");
 
             // Check if text starts with command prefix (allowing for extra text after the prefix)
             string normLower = normalizedText.ToLower().Trim();
@@ -360,9 +406,10 @@ public class AutoVADSTTClient : MonoBehaviour
             }
 
             // Add user message to chat history (for both commands and regular messages)
+            // Use normalized text so variations like "kibi" are shown as "kihbbi"
             if (piperClient != null)
             {
-                piperClient.AppendUserMessage(res.text);
+                piperClient.AppendUserMessage(normalizedText);
             }
 
             if (isCommand)
@@ -376,50 +423,60 @@ public class AutoVADSTTClient : MonoBehaviour
                     
                     if (aiBehaviorManager != null)
                     {
-                        // Normalize location name variations
-                        string normalizedForLocation = NormalizeLocationNames(normLower);
-                        if (showDebugLogs) Debug.Log($"[AutoVAD] After location normalization: '{normalizedForLocation}'");
+                        // Use the already lowercased normLower for location detection
+                        // (normalizedText already has location names properly capitalized)
+                        string locationLower = normLower;
                         
                         // Try to find a specific location in the text
                         string foundLocation = null;
                         
-                        if (normalizedForLocation.Contains("home") || normalizedForLocation.Contains("house"))
+                        if (locationLower.Contains("home") || locationLower.Contains("house"))
                             foundLocation = "house_mist";
-                        else if (normalizedForLocation.Contains("kugane"))
+                        else if (locationLower.Contains("kugane"))
                             foundLocation = "kugane";
-                        else if (normalizedForLocation.Contains("limsa"))
+                        else if (locationLower.Contains("limsa"))
                             foundLocation = "limsa_lominsa";
-                        else if (normalizedForLocation.Contains("gridania"))
+                        else if (locationLower.Contains("gridania"))
                             foundLocation = "new_gridania";
-                        else if (normalizedForLocation.Contains("uldah"))
+                        else if (locationLower.Contains("uldah"))
                             foundLocation = "uldah";
-                        else if (normalizedForLocation.Contains("gold saucer") || normalizedForLocation.Contains("saucer"))
+                        else if (locationLower.Contains("gold saucer") || locationLower.Contains("saucer"))
                             foundLocation = "gold_saucer";
-                        else if (normalizedForLocation.Contains("eulmore"))
+                        else if (locationLower.Contains("eulmore"))
                             foundLocation = "eulmore";
-                        else if (normalizedForLocation.Contains("solution nine"))
+                        else if (locationLower.Contains("solution nine"))
                             foundLocation = "solution_nine";
-                        else if (normalizedForLocation.Contains("tuliyollal"))
+                        else if (locationLower.Contains("tuliyollal"))
                             foundLocation = "tuliyollal";
-                        else if (normalizedForLocation.Contains("il mheg"))
+                        else if (locationLower.Contains("il mheg"))
                             foundLocation = "il_mheg";
-                        else if (normalizedForLocation.Contains("lakeland"))
+                        else if (locationLower.Contains("lakeland"))
                             foundLocation = "lakeland";
-                        else if (normalizedForLocation.Contains("shroud"))
+                        else if (locationLower.Contains("shroud"))
                             foundLocation = "central_shroud";
-                        else if (normalizedForLocation.Contains("la noscea"))
+                        else if (locationLower.Contains("la noscea"))
                             foundLocation = "middle_la_noscea";
-                        else if (normalizedForLocation.Contains("yaktel"))
+                        else if (locationLower.Contains("yaktel"))
                             foundLocation = "yaktel";
                         
                         if (foundLocation != null)
                         {
                             if (showDebugLogs) Debug.Log($"[AutoVAD] Found location: {foundLocation}");
+                            
+                            // Add user's command to conversation history
+                            ollama.AddUserMessageToHistory(normalizedText);
+                            
+                            if (showDebugLogs) Debug.Log($"[AutoVAD] Calling ChangeToLocation({foundLocation})");
                             aiBehaviorManager.ChangeToLocation(foundLocation);
                         }
                         else
                         {
                             if (showDebugLogs) Debug.Log($"[AutoVAD] No specific location found, teleporting randomly");
+                            
+                            // Add user's command to conversation history
+                            ollama.AddUserMessageToHistory(normalizedText);
+                            
+                            if (showDebugLogs) Debug.Log($"[AutoVAD] Calling ChangeToRandomLocation()");
                             aiBehaviorManager.ChangeToRandomLocation();
                         }
                         
@@ -442,6 +499,10 @@ public class AutoVADSTTClient : MonoBehaviour
                     {
                         // Send to webhook for mount/minion/etc
                         if (showDebugLogs) Debug.Log($"[AutoVAD] Webhook command detected (mount/minion/etc), sending to webhook");
+                        
+                        // Add user's command to conversation history
+                        ollama.AddUserMessageToHistory(normalizedText);
+                        
                         StartCoroutine(SendToCommandWebhook(normalizedText));
                     }
                     else
@@ -450,15 +511,15 @@ public class AutoVADSTTClient : MonoBehaviour
                         if (showDebugLogs) Debug.Log($"[AutoVAD] Unknown command type, treating as normal chat message");
                         canTalkAgain = true;
                         allowSTTRequests = true;
-                        ollama.Ask(res.text);
+                        ollama.Ask(normalizedText);
                     }
                 }
             }
             else
             {
-                // No command, send to normal chat (use original text, not normalized)
+                // No command, send to normal chat (use normalized text)
                 if (showDebugLogs) Debug.Log($"[AutoVAD] Not a command, sending to chat. normLower='{normLower}'");
-                ollama.Ask(res.text);
+                ollama.Ask(normalizedText);
             }
         }
     }
@@ -492,43 +553,46 @@ public class AutoVADSTTClient : MonoBehaviour
         string normalized = text;
         
         // Kugane variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(koogane|kugan|koogan|kugani|coogane|cugane)\b", "kugane", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(kugeni|koogane|kugan|koogan|kugani|coogane|cugane)\b", "Kugane", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Limsa variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(limza|lemsa|limsa|leemsa|limza lominsa|lemsa lominsa)\b", "limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(limza|lemsa|limsa|leemsa|limza lominsa|lemsa lominsa)\b", "Limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        
+        // Lominsa variations
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lominsa|lominza|lomin za)\b", "Lominsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Gridania variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gredania|gridanya|greedania|gredanya)\b", "gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gredania|gridanya|greedania|gredanya)\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Ul'dah variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(uldah|ooldah|ul da|ool dah|ulda)\b", "uldah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(uldah|ooldah|ul da|ool dah|ulda)\b", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Eulmore variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(eulmore|yule more|ule more|eelmore)\b", "eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(old moor|eulmore|yule more|ule more|eelmore)\b", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Tuliyollal variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(tuliyollal|tuli yollal|tulli yollal|tulia lal|toolie lal)\b", "tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(tuliyollal|tuli yollal|tulli yollal|tulia lal|toolie lal)\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Il Mheg variations (already handled but adding more)
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(ill meg|il meg|ill mheg|eel meg|eel mheg)\b", "il mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(ill meg|il meg|ill mheg|eel meg|eel mheg)\b", "Il Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Lakeland variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lakeland|lake land|lakelend)\b", "lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lakeland|lake land|lakelend)\b", "Lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Solution Nine variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(solution 9|solution nine|solution nine|sulution nine)\b", "solution nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(solution 9|solution nine|solution nine|sulution nine)\b", "Solution Nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Gold Saucer variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gold saucer|gold sauce er|golden saucer)\b", "gold saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gold saucer|gold sauce er|golden saucer)\b", "Gold Saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Shroud variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(shroud|shrowd|shrod)\b", "shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(shrood|shroud|shrowd|shrod)\b", "Shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // La Noscea variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(la noscea|la no sea|la noshea|la nos sea)\b", "la noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(la noscea|la no sea|la noshea|la nos sea)\b", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         // Yak T'el variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(yaktel|yak tel|yak tell|yakk tel)\b", "yaktel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(yaktel|yak tel|yak tell|yakk tel)\b", "Yaktel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         return normalized;
     }
@@ -538,6 +602,7 @@ public class AutoVADSTTClient : MonoBehaviour
         Debug.Log($"[Command] Sending to webhook: {text}");
 
         // Manually enqueue a TTS response using PiperClient
+        string chosenTTS = "";
         if (piperClient != null)
         {
             string[] ttsResponses = new string[]
@@ -553,8 +618,14 @@ public class AutoVADSTTClient : MonoBehaviour
 				"I'll look into that right away.",
 				"Give me a moment to find that out."
             };
-            string chosenTTS = ttsResponses[UnityEngine.Random.Range(0, ttsResponses.Length)];
+            chosenTTS = ttsResponses[UnityEngine.Random.Range(0, ttsResponses.Length)];
             piperClient.Enqueue(chosenTTS);
+            
+            // Add initial response to AI conversation history
+            if (ollama != null)
+            {
+                ollama.AddAssistantMessageToHistory(chosenTTS);
+            }
         }
         else
         {
@@ -595,6 +666,12 @@ public class AutoVADSTTClient : MonoBehaviour
         if (piperClient != null && !string.IsNullOrEmpty(htmlResponse))
         {
             piperClient.Enqueue(htmlResponse);
+            
+            // Add webhook response to AI conversation history
+            if (ollama != null)
+            {
+                ollama.AddAssistantMessageToHistory(htmlResponse);
+            }
         }
         else if (piperClient == null)
         {

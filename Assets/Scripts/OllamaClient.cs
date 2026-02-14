@@ -184,7 +184,8 @@ public class OllamaClient : MonoBehaviour
         string locationSection = "";
         if (!string.IsNullOrWhiteSpace(currentLocationContext))
         {
-            locationSection = "\n\nCURRENT LOCATION:\n" + currentLocationContext;
+            // Make location EXTREMELY prominent - put it at the TOP
+            locationSection = "\n\nKIHBBI'S CURRENT LOCATION : \n" + currentLocationContext + "\n";
         }
 
         string systemPrompt =
@@ -197,8 +198,7 @@ public class OllamaClient : MonoBehaviour
 - DO NOT mention or summarize persona JSON. Use silently as internal knowledge.
 - Output MUST be plain English text ONLY.
 - DO NOT output JSON, markdown, code blocks, or metadata.
-
-If the user message is neutral or factual (location, action, observation), respond neutrally or positively. Do NOT use sympathy or problem-solving language unless the user clearly expresses a problem or negative emotion.
+- You have access to conversation history - remember facts and context from previous messages.
 " + locationSection + @"
 
 PERSONA JSON:
@@ -234,12 +234,124 @@ PERSONA JSON:
     public void UpdateLocationContext(string locationDescription)
     {
         currentLocationContext = locationDescription;
+        
+        // DON'T trim history - keep all conversation context
+        // Instead, add a clear marker in the conversation and rely on system prompt priority
+        
+        // Add a location change marker to the conversation (if not initial setup)
+        if (chatHistory.Count > 1)
+        {
+            string locationName = ExtractLocationName(locationDescription);
+            chatHistory.Add(new ChatMessage
+            {
+                role = "system",
+                content = $"[LOCATION CHANGED: You are now in {locationName}]"
+            });
+            Debug.Log($"[Ollama] 📍 Added location change marker to conversation: {locationName}");
+        }
+        
         BuildInitialSystemMessage(); // Rebuild system message with new location
         
-        if (logPersonaLoaded)
+        Debug.Log($"[Ollama] ⚡ Location context UPDATED");
+        Debug.Log($"[Ollama] New location: {locationDescription}");
+        Debug.Log($"[Ollama] Chat history has {chatHistory.Count} message(s) - all preserved");
+        
+        // Show a snippet of the current system message for verification
+        if (chatHistory.Count > 0 && chatHistory[0].role == "system")
         {
-            Debug.Log($"[Ollama] Location context updated: {locationDescription}");
+            string snippet = chatHistory[0].content;
+            int locationIndex = snippet.IndexOf("YOUR CURRENT LOCATION");
+            if (locationIndex >= 0)
+            {
+                string locationSnippet = snippet.Substring(locationIndex, Math.Min(300, snippet.Length - locationIndex));
+                Debug.Log($"[Ollama] System message location section:\n{locationSnippet}");
+            }
+            else
+            {
+                Debug.LogWarning("[Ollama] ⚠️ No location section found in system message after update!");
+            }
         }
+    }
+    
+    private string ExtractLocationName(string locationDescription)
+    {
+        // Extract location name from description like "You are in Kugane during the day..."
+        if (locationDescription.StartsWith("You are in "))
+        {
+            int startIndex = "You are in ".Length;
+            int endIndex = locationDescription.IndexOf(" during ", startIndex);
+            if (endIndex > startIndex)
+            {
+                return locationDescription.Substring(startIndex, endIndex - startIndex);
+            }
+        }
+        return "a new area";
+    }
+    
+    /// <summary>
+    /// Remove emojis and special characters that don't render well in Eurostile font.
+    /// Keeps: letters (A-Z, a-z), numbers (0-9), spaces, and basic punctuation.
+    /// </summary>
+    private string StripEmojisAndSpecialChars(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return text;
+        
+        // Keep: letters, numbers, spaces, and common punctuation
+        // Remove: emojis, special symbols, etc.
+        var filtered = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"[^a-zA-Z0-9\s\.,!?\-':;()\[\]""]+",
+            ""
+        );
+        
+        return filtered;
+    }
+    
+    /// <summary>
+    /// Manually add an assistant response to conversation history.
+    /// Use this when the AI "says" something through a command without going through Ask().
+    /// </summary>
+    public void AddAssistantMessageToHistory(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+            
+        chatHistory.Add(new ChatMessage
+        {
+            role = "assistant",
+            content = message
+        });
+        
+        Debug.Log($"[Ollama] 💬 Added assistant message to history: {message}");
+    }
+    
+    /// <summary>
+    /// Manually add a user message to conversation history.
+    /// Use this when a command is issued that doesn't go through Ask().
+    /// </summary>
+    public void AddUserMessageToHistory(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+            
+        chatHistory.Add(new ChatMessage
+        {
+            role = "user",
+            content = message
+        });
+        
+        TrimHistory(); // Trim after adding user message
+        Debug.Log($"[Ollama] 👤 Added user message to history: {message}");
+    }
+    
+    /// <summary>
+    /// Get the full conversation history for debugging purposes.
+    /// Returns a copy of the chat history list.
+    /// </summary>
+    public List<ChatMessage> GetChatHistory()
+    {
+        return new List<ChatMessage>(chatHistory);
     }
 
     [ContextMenu("Force Reset Conversation")]
@@ -328,20 +440,44 @@ PERSONA JSON:
                 yield return memoryCoroutine;
                 relevantMemories = memoryCoroutine.Current as List<string>;
                 
-                // Update system message with current relevant memories
                 if (relevantMemories != null && relevantMemories.Count > 0)
                 {
-                    // Update the system message in chatHistory[0]
-                    BuildInitialSystemMessage(relevantMemories);
                     Debug.Log($"[Memory] Injected {relevantMemories.Count} relevant memories into system prompt:");
                     foreach (var mem in relevantMemories)
                     {
                         Debug.Log($"  - {mem}");
                     }
-                    
-                    // Show full system prompt with memories
-                    Debug.Log($"[Memory] FULL SYSTEM PROMPT:\n{chatHistory[0].content}");
                 }
+            }
+            
+            // ALWAYS update the system message with current location context and memories
+            // This ensures location changes are reflected even if no memories are found
+            BuildInitialSystemMessage(relevantMemories);
+            
+            // CRITICAL DEBUG: Show exactly what location we're sending
+            Debug.Log($"[Ollama] 🔥 CURRENT LOCATION CONTEXT: {currentLocationContext}");
+            Debug.Log($"[Ollama] 📊 Chat history count: {chatHistory.Count} messages (all being sent to AI)");
+            
+            // Debug: Verify the system message has the correct location
+            if (chatHistory.Count > 0 && chatHistory[0].role == "system")
+            {
+                string sysMsg = chatHistory[0].content;
+                int locIndex = sysMsg.IndexOf("YOUR CURRENT LOCATION");
+                if (locIndex >= 0)
+                {
+                    string locSnippet = sysMsg.Substring(locIndex, Math.Min(400, sysMsg.Length - locIndex));
+                    Debug.Log($"[Ollama] 📍 Location section in system prompt:\n{locSnippet}");
+                }
+                else
+                {
+                    Debug.LogError("[Ollama] ⚠️⚠️⚠️ NO LOCATION FOUND IN SYSTEM MESSAGE! This is the bug!");
+                }
+            }
+            
+            if (logPersonaLoaded && relevantMemories != null && relevantMemories.Count > 0)
+            {
+                // Show full system prompt with memories (only when memories exist)
+                Debug.Log($"[Memory] FULL SYSTEM PROMPT:\n{chatHistory[0].content}");
             }
 
             chatHistory.Add(new ChatMessage { role = "user", content = userText });
@@ -459,6 +595,9 @@ PERSONA JSON:
             }
 
             string aiText = o.message.content.Trim();
+            
+            // Strip emojis and special characters that don't render in Eurostile font
+            aiText = StripEmojisAndSpecialChars(aiText);
 
             chatHistory.Add(new ChatMessage { role = "assistant", content = aiText });
             TrimHistory();
@@ -471,6 +610,10 @@ PERSONA JSON:
 
             Debug.Log($"🤖 AI Answer: {parsed.answer}");
             Debug.Log($"🙂 Emotion: {parsed.emotion}");
+            
+            // Set static emotion for VTuber animations
+            VTuberAnimationController.currentEmotion = parsed.emotion;
+            Debug.Log($"[Ollama] ⚡ SET STATIC EMOTION TO: {parsed.emotion} at time {Time.time}");
 
             EmitAllSentences(aiText);
 
@@ -526,6 +669,7 @@ PERSONA JSON:
             return;
 
         int removeCount = chatHistory.Count - maxTotal;
+        Debug.Log($"[Ollama] 🧹 Trimming history: removing {removeCount} oldest messages (keeping {maxTotal})");
         chatHistory.RemoveRange(systemCount, removeCount);
     }
 
@@ -555,8 +699,8 @@ PERSONA JSON:
                 // Only emit if there's actual text content (at least 2 chars)
                 if (textOnly.Length >= 2)
                 {
-                    string emo = InferEmotionFromText(sentence);
-                    OnSentenceReady?.Invoke(sentence, emo);
+                    // Emotion is already set globally, no need to analyze per sentence
+                    OnSentenceReady?.Invoke(sentence, "neutral");
                 }
             }
         }
@@ -564,8 +708,7 @@ PERSONA JSON:
         string leftover = sb.ToString().Trim();
         if (!string.IsNullOrWhiteSpace(leftover) && leftover.Length > 1)
         {
-            string emo = InferEmotionFromText(leftover);
-            OnSentenceReady?.Invoke(leftover, emo);
+            OnSentenceReady?.Invoke(leftover, "neutral");
         }
     }
 
@@ -608,7 +751,11 @@ PERSONA JSON:
             else if (action.Contains("glare") || action.Contains("scowl") || action.Contains("growl") ||
                      action.Contains("huff") || action.Contains("stomp") || action.Contains("clench") ||
                      action.Contains("cross arms") || action.Contains("roll eyes") || action.Contains("snap") ||
-                     action.Contains("slam") || action.Contains("march"))
+                     action.Contains("slam") || action.Contains("march") || action.Contains("narrow eyes") ||
+                     action.Contains("grit teeth") || action.Contains("grind teeth") || action.Contains("clench fist") ||
+                     action.Contains("point") || action.Contains("shove") || action.Contains("push away") ||
+                     action.Contains("turn away") || action.Contains("storm off") || action.Contains("throw") ||
+                     action.Contains("snarl") || action.Contains("bare teeth") || action.Contains("sneer"))
             {
                 angry += 4;
             }
@@ -633,7 +780,7 @@ PERSONA JSON:
 
         if (raw.Contains("?!") || raw.Contains("!?")) surprised += 4;
         if (questions >= 2) surprised += 2;
-        if (exclamations >= 3) { happy += 2; surprised += 1; angry += 1; }
+        if (exclamations >= 3) { happy += 2; surprised += 1; angry += 2; } // Increased angry bonus for multiple exclamations
         if (exclamations == 2) happy += 1;
 
         if (t.Contains("hehe") || t.Contains("haha") || t.Contains("lol") || t.Contains("lmao")) happy += 3;
@@ -648,7 +795,34 @@ PERSONA JSON:
 
         if (t.Contains("tch") || t.Contains("hmph") || t.Contains("idiot") || t.Contains("moron")) angry += 3;
         if (t.Contains("shut up") || t.Contains("stop it") || t.Contains("enough")) angry += 4;
-        if (t.Contains("annoying") || t.Contains("you're annoying")) angry += 3;
+        if (t.Contains("annoying") || t.Contains("you're annoying") || t.Contains("youre annoying")) angry += 3;
+        
+        // Common angry expressions
+        if (t.Contains("damn") || t.Contains("dammit") || t.Contains("hell") || t.Contains("crap")) angry += 3;
+        if (t.Contains("stupid") || t.Contains("ridiculous") || t.Contains("absurd")) angry += 3;
+        if (t.Contains("hate") || t.Contains("i hate") || t.Contains("so annoying")) angry += 4;
+        if (t.Contains("furious") || t.Contains("pissed") || t.Contains("mad at")) angry += 4;
+        if (t.Contains("frustrated") || t.Contains("irritated") || t.Contains("irritating")) angry += 3;
+        
+        // Angry phrases
+        if (t.Contains("are you kidding") || t.Contains("you kidding me") || t.Contains("kidding me")) angry += 4;
+        if (t.Contains("can't believe") || t.Contains("cant believe") || t.Contains("unbelievable")) angry += 3;
+        if (t.Contains("what's wrong with you") || t.Contains("whats wrong with you")) angry += 4;
+        if (t.Contains("how dare you") || t.Contains("don't you dare") || t.Contains("dont you dare")) angry += 4;
+        if (t.Contains("leave me alone") || t.Contains("get out") || t.Contains("go away")) angry += 4;
+        if (t.Contains("i don't care") || t.Contains("i dont care") || t.Contains("don't care")) angry += 3;
+        
+        // Sarcastic/dismissive (often angry context)
+        if (t.Contains("whatever") || t.Contains("yeah right") || t.Contains("sure thing")) angry += 2;
+        if (t.Contains("oh great") || t.Contains("just great") || t.Contains("perfect")) angry += 2; // Sarcastic use
+        if (t.Contains("of course") && exclamations > 0) angry += 2; // Sarcastic "of course!"
+        
+        // Complaints and annoyance
+        if (t.Contains("ugh") || t.Contains("argh") || t.Contains("gah") || t.Contains("grrr") || t.Contains("grr")) angry += 3;
+        if (t.Contains("waste of time") || t.Contains("useless") || t.Contains("pointless")) angry += 3;
+        if (t.Contains("sick of") || t.Contains("tired of") || t.Contains("fed up")) angry += 4;
+        if (t.Contains("not fair") || t.Contains("unfair") || t.Contains("that's not fair")) angry += 3;
+        if (t.Contains("screw") || t.Contains("forget it") || t.Contains("never mind")) angry += 3;
 
         if (t.Contains("no way") || t.Contains("what the") || t.Contains("wait") || t.Contains("seriously")) surprised += 3;
         if (t.Contains("oh my") || t.Contains("holy") || t.Contains("gods")) surprised += 2;
@@ -667,6 +841,9 @@ PERSONA JSON:
     // Call this method when TTS (Piper) finishes playing all sentences
     public void OnTTSComplete()
     {
+        // Reset emotion back to neutral when TTS finishes
+        VTuberAnimationController.currentEmotion = "neutral";
+        
         if (sttClient != null)
         {
             sttClient.canTalkAgain = true;
