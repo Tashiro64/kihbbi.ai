@@ -59,6 +59,8 @@ public class VTuberAnimationController : MonoBehaviour
     private CubismParameter browLeftParameter;
     private CubismParameter browRightParameter;
     private CubismParameter bodyAngleXParameter;
+    private CubismParameter rightArmParameter;
+    private CubismParameter leftArmParameter;
     private CubismModel cubismModel;
     private float targetMouthOpen = 0f;
     private float currentMouthOpen = 0f;
@@ -71,6 +73,22 @@ public class VTuberAnimationController : MonoBehaviour
     private float bodyAngleXDuration = 1f;
     private float bodyAngleXElapsed = 0f;
     private float nextBodyAngleXChangeTime = 0f;
+    
+    // Arm animation state variables
+    private float targetRightArm = 0f;
+    private float currentRightArm = 0f;
+    private float startRightArm = 0f;
+    private float rightArmDuration = 1f;
+    private float rightArmElapsed = 0f;
+    private float nextRightArmChangeTime = 0f;
+    
+    private float targetLeftArm = 0f;
+    private float currentLeftArm = 0f;
+    private float startLeftArm = 0f;
+    private float leftArmDuration = 1f;
+    private float leftArmElapsed = 0f;
+    private float nextLeftArmChangeTime = 0f;
+    
     private bool isBlinking = false;
     private bool isMovingEyes = false;
     private bool isEmotionActive = false;
@@ -223,6 +241,16 @@ public class VTuberAnimationController : MonoBehaviour
                     bodyAngleXParameter = param;
                     Debug.Log($"[VTuberAnimation] ✅ Found body angle X parameter: {param.Id}");
                 }
+                else if (param.Id == "Param")
+                {
+                    rightArmParameter = param;
+                    Debug.Log($"[VTuberAnimation] ✅ Found right arm parameter: {param.Id}");
+                }
+                else if (param.Id == "Param5")
+                {
+                    leftArmParameter = param;
+                    Debug.Log($"[VTuberAnimation] ✅ Found left arm parameter: {param.Id}");
+                }
             }
             
             if (eyeLeftParameter == null || eyeRightParameter == null)
@@ -263,6 +291,24 @@ public class VTuberAnimationController : MonoBehaviour
                 targetBodyAngleX = 0f;
                 nextBodyAngleXChangeTime = Time.time + 0.5f; // Start first change in 0.5s
                 Debug.Log($"[VTuberAnimation] ✅ Initialized ParamBodyAngleX to 0");
+            }
+            
+            // Initialize arm parameters
+            if (rightArmParameter != null)
+            {
+                rightArmParameter.Value = 0f;
+                currentRightArm = 0f;
+                targetRightArm = 0f;
+                nextRightArmChangeTime = Time.time + Random.Range(0.5f, 2f);
+                Debug.Log($"[VTuberAnimation] ✅ Initialized Param (right arm) to 0");
+            }
+            if (leftArmParameter != null)
+            {
+                leftArmParameter.Value = 0f;
+                currentLeftArm = 0f;
+                targetLeftArm = 0f;
+                nextLeftArmChangeTime = Time.time + Random.Range(0.5f, 2f);
+                Debug.Log($"[VTuberAnimation] ✅ Initialized Param5 (left arm) to 0");
             }
         }
         else
@@ -331,6 +377,10 @@ public class VTuberAnimationController : MonoBehaviour
         
         // Update body angle X animation
         UpdateBodyAngleX();
+        
+        // Update arm animations
+        UpdateRightArm();
+        UpdateLeftArm();
     }
     
     private void UpdateLipSync()
@@ -848,6 +898,106 @@ public class VTuberAnimationController : MonoBehaviour
         
         // Apply to parameter every frame in LateUpdate
         bodyAngleXParameter.Value = currentBodyAngleX;
+    }
+    
+    private void UpdateRightArm()
+    {
+        if (rightArmParameter == null)
+            return;
+        
+        // Check if it's time to pick a new target
+        if (Time.time >= nextRightArmChangeTime)
+        {
+            // Save starting position
+            startRightArm = currentRightArm;
+            
+            // Pick new random target between 0 and 14
+            targetRightArm = Random.Range(0f, 14f);
+            
+            // Pick new random duration between 0.5 and 1 seconds
+            rightArmDuration = Random.Range(0.5f, 1f);
+            
+            // Reset elapsed time
+            rightArmElapsed = 0f;
+            
+            // Schedule next change with a pause (0.3-1s after this animation completes)
+            nextRightArmChangeTime = Time.time + rightArmDuration + Random.Range(0.3f, 1f);
+            
+            if (showDebugLogs)
+                Debug.Log($"[VTuberAnimation] Right arm (Param): {startRightArm:F2} → {targetRightArm:F2} over {rightArmDuration:F2}s");
+        }
+        
+        // Animate towards target
+        if (rightArmElapsed < rightArmDuration)
+        {
+            rightArmElapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(rightArmElapsed / rightArmDuration);
+            
+            // Apply easing (InOutSine)
+            float easedT = t < 0.5f 
+                ? (1f - Mathf.Cos(t * Mathf.PI)) / 2f 
+                : (Mathf.Sin((t - 0.5f) * Mathf.PI) + 1f) / 2f;
+            
+            currentRightArm = Mathf.Lerp(startRightArm, targetRightArm, easedT);
+        }
+        else
+        {
+            // Ensure we reach the target exactly
+            currentRightArm = targetRightArm;
+        }
+        
+        // Apply to parameter every frame in LateUpdate
+        rightArmParameter.Value = currentRightArm;
+    }
+    
+    private void UpdateLeftArm()
+    {
+        if (leftArmParameter == null)
+            return;
+        
+        // Check if it's time to pick a new target
+        if (Time.time >= nextLeftArmChangeTime)
+        {
+            // Save starting position
+            startLeftArm = currentLeftArm;
+            
+            // Pick new random target between 0 and -14
+            targetLeftArm = Random.Range(0f, -14f);
+            
+            // Pick new random duration between 0.5 and 2 seconds
+            leftArmDuration = Random.Range(0.5f, 1f);
+            
+            // Reset elapsed time
+            leftArmElapsed = 0f;
+            
+            // Schedule next change with a pause (0.3-1s after this animation completes)
+            nextLeftArmChangeTime = Time.time + leftArmDuration + Random.Range(0.3f, 1f);
+            
+            if (showDebugLogs)
+                Debug.Log($"[VTuberAnimation] Left arm (Param5): {startLeftArm:F2} → {targetLeftArm:F2} over {leftArmDuration:F2}s");
+        }
+        
+        // Animate towards target
+        if (leftArmElapsed < leftArmDuration)
+        {
+            leftArmElapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(leftArmElapsed / leftArmDuration);
+            
+            // Apply easing (InOutSine)
+            float easedT = t < 0.5f 
+                ? (1f - Mathf.Cos(t * Mathf.PI)) / 2f 
+                : (Mathf.Sin((t - 0.5f) * Mathf.PI) + 1f) / 2f;
+            
+            currentLeftArm = Mathf.Lerp(startLeftArm, targetLeftArm, easedT);
+        }
+        else
+        {
+            // Ensure we reach the target exactly
+            currentLeftArm = targetLeftArm;
+        }
+        
+        // Apply to parameter every frame in LateUpdate
+        leftArmParameter.Value = currentLeftArm;
     }
     
     private void PerformRandomIdleAnimation()

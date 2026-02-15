@@ -812,11 +812,6 @@ PERSONA JSON:
         if (t.Contains("leave me alone") || t.Contains("get out") || t.Contains("go away")) angry += 4;
         if (t.Contains("i don't care") || t.Contains("i dont care") || t.Contains("don't care")) angry += 3;
         
-        // Sarcastic/dismissive (often angry context)
-        if (t.Contains("whatever") || t.Contains("yeah right") || t.Contains("sure thing")) angry += 2;
-        if (t.Contains("oh great") || t.Contains("just great") || t.Contains("perfect")) angry += 2; // Sarcastic use
-        if (t.Contains("of course") && exclamations > 0) angry += 2; // Sarcastic "of course!"
-        
         // Complaints and annoyance
         if (t.Contains("ugh") || t.Contains("argh") || t.Contains("gah") || t.Contains("grrr") || t.Contains("grr")) angry += 3;
         if (t.Contains("waste of time") || t.Contains("useless") || t.Contains("pointless")) angry += 3;
@@ -828,9 +823,18 @@ PERSONA JSON:
         if (t.Contains("oh my") || t.Contains("holy") || t.Contains("gods")) surprised += 2;
 
         int max = Mathf.Max(happy, sad, angry, surprised);
+        
+        // Debug logging for emotion detection
+        Debug.Log($"[Emotion Debug] Text: \"{raw}\"");
+        Debug.Log($"[Emotion Debug] Scores - Happy: {happy}, Sad: {sad}, Angry: {angry}, Surprised: {surprised}, Max: {max}");
+        
         if (max <= 1) return "neutral";
 
-        if (angry == max) return "angry";
+        if (angry == max)
+        {
+            Debug.Log($"[Emotion Debug] Result: ANGRY (score: {angry})");
+            return "angry";
+        }
         if (sad == max) return "sad";
         if (surprised == max) return "surprised";
         if (happy == max) return "happy";
