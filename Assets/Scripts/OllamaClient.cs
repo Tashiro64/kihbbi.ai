@@ -12,9 +12,21 @@ public class OllamaClient : MonoBehaviour
     // Singleton protection
     private static OllamaClient instance;
 
+    public enum OllamaModel
+    {
+        [InspectorName("qwen2.5:3b")]
+        Qwen25_3B,
+        [InspectorName("qwen2.5:3b-instruct")]
+        Qwen25_3BInstruct,
+        [InspectorName("llama3.1")]
+        Llama31,
+        [InspectorName("llama3.2:3b")]
+        Llama32_3B
+    }
+
     [Header("Ollama")]
     public string ollamaChatUrl = "http://127.0.0.1:11434/api/chat";
-    public string model = "llama3.1";
+    public OllamaModel model = OllamaModel.Llama31;
 
     [Header("Persona File")]
     public string personaRelativePath = "AI/persona.json";
@@ -114,6 +126,10 @@ public class OllamaClient : MonoBehaviour
 
     void Awake()
     {
+        // Force 60 FPS to reduce resource usage
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0; // Disable VSync for consistent 60 FPS
+        
         // singleton guard
         if (instance != null && instance != this)
         {
@@ -173,6 +189,18 @@ public class OllamaClient : MonoBehaviour
         personaJson = File.ReadAllText(path);
     }
 
+    private string GetSelectedModelName()
+    {
+        return model switch
+        {
+            OllamaModel.Qwen25_3B => "qwen2.5:3b",
+            OllamaModel.Qwen25_3BInstruct => "qwen2.5:3b-instruct",
+            OllamaModel.Llama31 => "llama3.1",
+            OllamaModel.Llama32_3B => "llama3.2:3b",
+            _ => "llama3.1"
+        };
+    }
+
     public void BuildInitialSystemMessage(List<string> relevantMemories = null)
     {
         string memorySection = "";
@@ -197,6 +225,7 @@ public class OllamaClient : MonoBehaviour
 - NEVER refer to Final Fantasy XIV as a game. You live in Eorzea.
 - DO NOT mention or summarize persona JSON. Use silently as internal knowledge.
 - Output MUST be plain English text ONLY.
+- Do NOT include any emotions/actions like *smiles* or *grins* or any other variants. Just plain text.
 - DO NOT output JSON, markdown, code blocks, or metadata.
 - You have access to conversation history - remember facts and context from previous messages.
 " + locationSection + @"
@@ -297,11 +326,11 @@ PERSONA JSON:
         if (string.IsNullOrEmpty(text))
             return text;
         
-        // Keep: letters, numbers, spaces, and common punctuation
+        // Keep: letters, numbers, spaces, common punctuation, and asterisks (for actions/emotions)
         // Remove: emojis, special symbols, etc.
         var filtered = System.Text.RegularExpressions.Regex.Replace(
             text,
-            @"[^a-zA-Z0-9\s\.,!?\-':;()\[\]""]+",
+            @"[^a-zA-Z0-9\s\.,!?\-':;()\[\]""\*]+",
             ""
         );
         
@@ -369,9 +398,11 @@ PERSONA JSON:
     
     private System.Collections.IEnumerator TestOllamaDirectly()
     {
+        string selectedModelName = GetSelectedModelName();
+
         var testRequest = new OllamaChatRequest
         {
-            model = model,
+            model = selectedModelName,
             stream = false,
             messages = new List<ChatMessage>
             {
@@ -485,12 +516,12 @@ PERSONA JSON:
 
             var reqObj = new OllamaChatRequest
             {
-                model = model,
+                model = GetSelectedModelName(),
                 stream = false,
                 messages = chatHistory
             };
 
-            Debug.Log($"[Ollama] Using model: {model}");
+            Debug.Log($"[Ollama] Using model: {GetSelectedModelName()}");
 
             string json = JsonUtility.ToJson(reqObj);
             
@@ -605,16 +636,12 @@ PERSONA JSON:
             var parsed = new KihbbiAIResponse
             {
                 answer = aiText,
-                emotion = InferEmotionFromText(aiText)
+                emotion = "neutral" // Emotion will be set per-sentence now
             };
 
             Debug.Log($"🤖 AI Answer: {parsed.answer}");
-            Debug.Log($"🙂 Emotion: {parsed.emotion}");
             
-            // Set static emotion for VTuber animations
-            VTuberAnimationController.currentEmotion = parsed.emotion;
-            Debug.Log($"[Ollama] ⚡ SET STATIC EMOTION TO: {parsed.emotion} at time {Time.time}");
-
+            // Don't set global emotion anymore - will be set per sentence
             EmitAllSentences(aiText);
 
             // Start background fact extraction during TTS
@@ -699,8 +726,9 @@ PERSONA JSON:
                 // Only emit if there's actual text content (at least 2 chars)
                 if (textOnly.Length >= 2)
                 {
-                    // Emotion is already set globally, no need to analyze per sentence
-                    OnSentenceReady?.Invoke(sentence, "neutral");
+                    // Analyze emotion per sentence
+                    string sentenceEmotion = InferEmotionFromText(sentence);
+                    OnSentenceReady?.Invoke(sentence, sentenceEmotion);
                 }
             }
         }
@@ -708,7 +736,8 @@ PERSONA JSON:
         string leftover = sb.ToString().Trim();
         if (!string.IsNullOrWhiteSpace(leftover) && leftover.Length > 1)
         {
-            OnSentenceReady?.Invoke(leftover, "neutral");
+            string leftoverEmotion = InferEmotionFromText(leftover);
+            OnSentenceReady?.Invoke(leftover, leftoverEmotion);
         }
     }
 
@@ -722,20 +751,45 @@ PERSONA JSON:
 
         int happy = 0, sad = 0, angry = 0, surprised = 0;
 
+        // Check for uppercase yelling (50%+ uppercase = angry)
+        int totalLetters = 0;
+        int uppercaseLetters = 0;
+        foreach (char c in raw)
+        {
+            if (char.IsLetter(c))
+            {
+                totalLetters++;
+                if (char.IsUpper(c))
+                {
+                    uppercaseLetters++;
+                }
+            }
+        }
+        
+        if (totalLetters > 0)
+        {
+            float uppercasePercentage = (float)uppercaseLetters / totalLetters;
+            if (uppercasePercentage >= 0.5f)
+            {
+                angry += 10;  // Strong boost for yelling
+                Debug.Log($"[Emotion Debug] UPPERCASE DETECTED: {uppercasePercentage:P0} ({uppercaseLetters}/{totalLetters}) - Adding 10 to angry");
+            }
+        }
+
         // Extract and analyze action keywords between asterisks
         var actionMatches = System.Text.RegularExpressions.Regex.Matches(text, @"\*([^*]+)\*");
         foreach (System.Text.RegularExpressions.Match match in actionMatches)
         {
             string action = match.Groups[1].Value.ToLowerInvariant().Trim();
             
-            // Happy actions
+            // Happy actions (increased weight for happiness)
             if (action.Contains("wink") || action.Contains("smile") || action.Contains("grin") || 
                 action.Contains("giggle") || action.Contains("laugh") || action.Contains("chuckle") ||
                 action.Contains("beam") || action.Contains("bounce") || action.Contains("dance") ||
                 action.Contains("hug") || action.Contains("kiss") || action.Contains("cuddle") ||
                 action.Contains("nod") && action.Contains("excitedly"))
             {
-                happy += 4;
+                happy += 5;  // Increased from 4 to 5
             }
             
             // Sad actions
@@ -747,26 +801,21 @@ PERSONA JSON:
                 sad += 4;
             }
             
-            // Angry actions  
+            // Angry actions (reduced sensitivity)
             else if (action.Contains("glare") || action.Contains("scowl") || action.Contains("growl") ||
-                     action.Contains("huff") || action.Contains("stomp") || action.Contains("clench") ||
-                     action.Contains("cross arms") || action.Contains("roll eyes") || action.Contains("snap") ||
-                     action.Contains("slam") || action.Contains("march") || action.Contains("narrow eyes") ||
+                     action.Contains("stomp") || action.Contains("slam") ||
                      action.Contains("grit teeth") || action.Contains("grind teeth") || action.Contains("clench fist") ||
-                     action.Contains("point") || action.Contains("shove") || action.Contains("push away") ||
-                     action.Contains("turn away") || action.Contains("storm off") || action.Contains("throw") ||
+                     action.Contains("storm off") || action.Contains("throw") ||
                      action.Contains("snarl") || action.Contains("bare teeth") || action.Contains("sneer"))
             {
-                angry += 4;
+                angry += 3;  // Reduced from 4 to 3, and removed common actions like "huff", "point", "turn away"
             }
             
-            // Surprised actions
-            else if (action.Contains("gasp") || action.Contains("blink") || action.Contains("stare") ||
-                     action.Contains("jump") || action.Contains("startle") || action.Contains("wide eyes") ||
-                     action.Contains("raise eyebrow") || action.Contains("tilt head") || 
-                     action.Contains("lean forward") || action.Contains("look surprised"))
+            // Surprised actions (only strong surprise)
+            else if (action.Contains("gasp") || action.Contains("jump") || action.Contains("startle") || 
+                     action.Contains("wide eyes") || action.Contains("look surprised"))
             {
-                surprised += 4;
+                surprised += 4;  // Removed common actions like "blink", "stare", "tilt head"
             }
         }
 
@@ -779,48 +828,50 @@ PERSONA JSON:
         }
 
         if (raw.Contains("?!") || raw.Contains("!?")) surprised += 4;
-        if (questions >= 2) surprised += 2;
-        if (exclamations >= 3) { happy += 2; surprised += 1; angry += 2; } // Increased angry bonus for multiple exclamations
-        if (exclamations == 2) happy += 1;
+        if (questions >= 2) surprised += 1;  // Reduced from 2 to 1
+        if (exclamations >= 3) { happy += 3; surprised += 1; }  // Increased happy from 2 to 3
+        if (exclamations == 2) happy += 2;  // Increased from 1 to 2
+        if (exclamations == 1) happy += 1;  // Added bonus for single exclamation
 
-        if (t.Contains("hehe") || t.Contains("haha") || t.Contains("lol") || t.Contains("lmao")) happy += 3;
-        if (t.Contains("aww") || t.Contains("awww") || t.Contains("so cute") || t.Contains("adorable")) happy += 2;
-        if (t.Contains("yay") || t.Contains("yaaay") || t.Contains("yesss")) happy += 2;
-        if (raw.Contains("♡") || raw.Contains("❤") || raw.Contains("<3")) happy += 3;
+        if (t.Contains("hehe") || t.Contains("haha") || t.Contains("lol") || t.Contains("lmao")) happy += 4;  // Increased from 3 to 4
+        if (t.Contains("aww") || t.Contains("awww") || t.Contains("so cute") || t.Contains("adorable")) happy += 3;  // Increased from 2 to 3
+        if (t.Contains("yay") || t.Contains("yaaay") || t.Contains("yesss")) happy += 3;  // Increased from 2 to 3
+        if (raw.Contains("♡") || raw.Contains("❤") || raw.Contains("<3")) happy += 4;  // Increased from 3 to 4
+        
+        // Additional happy keywords
+        if (t.Contains("love") || t.Contains("lovely") || t.Contains("wonderful")) happy += 3;
+        if (t.Contains("great") || t.Contains("amazing") || t.Contains("awesome") || t.Contains("fantastic")) happy += 2;
+        if (t.Contains("nice") || t.Contains("sweet") || t.Contains("fun") || t.Contains("enjoy")) happy += 2;
+        if (t.Contains("glad") || t.Contains("pleased") || t.Contains("delighted")) happy += 3;
 
         if (t.Contains("i'm sorry") || t.Contains("im sorry") || t.Contains("i apologize")) sad += 3;
         if (t.Contains("it's okay") || t.Contains("its okay") || t.Contains("it will be okay") || t.Contains("it’ll be okay")) sad += 2;
         if (t.Contains("poor thing") || t.Contains("oh no") || t.Contains("that's awful") || t.Contains("that’s awful")) sad += 2;
         if (raw.Contains("...")) sad += 1;
 
-        if (t.Contains("tch") || t.Contains("hmph") || t.Contains("idiot") || t.Contains("moron")) angry += 3;
-        if (t.Contains("shut up") || t.Contains("stop it") || t.Contains("enough")) angry += 4;
-        if (t.Contains("annoying") || t.Contains("you're annoying") || t.Contains("youre annoying")) angry += 3;
+        // Only strong angry expressions (reduced sensitivity)
+        if (t.Contains("idiot") || t.Contains("moron")) angry += 3;
+        if (t.Contains("shut up") || t.Contains("stop it")) angry += 4;
+        if (t.Contains("so annoying")) angry += 3;  // Removed general "annoying"
         
-        // Common angry expressions
-        if (t.Contains("damn") || t.Contains("dammit") || t.Contains("hell") || t.Contains("crap")) angry += 3;
-        if (t.Contains("stupid") || t.Contains("ridiculous") || t.Contains("absurd")) angry += 3;
-        if (t.Contains("hate") || t.Contains("i hate") || t.Contains("so annoying")) angry += 4;
-        if (t.Contains("furious") || t.Contains("pissed") || t.Contains("mad at")) angry += 4;
-        if (t.Contains("frustrated") || t.Contains("irritated") || t.Contains("irritating")) angry += 3;
+        // Strong angry expressions only
+        if (t.Contains("stupid")) angry += 3;  // Removed "ridiculous" and "absurd"
+        if (t.Contains("i hate")) angry += 4;  // Only "I hate", not just "hate"
+        if (t.Contains("furious") || t.Contains("pissed")) angry += 4;
         
-        // Angry phrases
-        if (t.Contains("are you kidding") || t.Contains("you kidding me") || t.Contains("kidding me")) angry += 4;
-        if (t.Contains("can't believe") || t.Contains("cant believe") || t.Contains("unbelievable")) angry += 3;
-        if (t.Contains("what's wrong with you") || t.Contains("whats wrong with you")) angry += 4;
+        // Angry phrases - only very clear ones
         if (t.Contains("how dare you") || t.Contains("don't you dare") || t.Contains("dont you dare")) angry += 4;
-        if (t.Contains("leave me alone") || t.Contains("get out") || t.Contains("go away")) angry += 4;
-        if (t.Contains("i don't care") || t.Contains("i dont care") || t.Contains("don't care")) angry += 3;
+        if (t.Contains("get out") || t.Contains("go away")) angry += 4;
         
-        // Complaints and annoyance
-        if (t.Contains("ugh") || t.Contains("argh") || t.Contains("gah") || t.Contains("grrr") || t.Contains("grr")) angry += 3;
-        if (t.Contains("waste of time") || t.Contains("useless") || t.Contains("pointless")) angry += 3;
-        if (t.Contains("sick of") || t.Contains("tired of") || t.Contains("fed up")) angry += 4;
-        if (t.Contains("not fair") || t.Contains("unfair") || t.Contains("that's not fair")) angry += 3;
-        if (t.Contains("screw") || t.Contains("forget it") || t.Contains("never mind")) angry += 3;
+        // Strong complaints only
+        if (t.Contains("grrr") || t.Contains("grr")) angry += 3;  // Removed "ugh", "argh"
+        if (t.Contains("fed up")) angry += 4;  // Removed "sick of", "tired of"
 
-        if (t.Contains("no way") || t.Contains("what the") || t.Contains("wait") || t.Contains("seriously")) surprised += 3;
-        if (t.Contains("oh my") || t.Contains("holy") || t.Contains("gods")) surprised += 2;
+        // Only real amazement words for surprised (removed common words like "wait", "seriously")
+        if (t.Contains("oh my god") || t.Contains("oh my gosh") || t.Contains("omg")) surprised += 4;
+        if (t.Contains("wow") || t.Contains("woah") || t.Contains("whoa")) surprised += 4;
+        if (t.Contains("no way") || t.Contains("what the")) surprised += 3;
+        if (t.Contains("unbelievable") || t.Contains("incredible") || t.Contains("amazing")) surprised += 2;
 
         int max = Mathf.Max(happy, sad, angry, surprised);
         
@@ -828,7 +879,15 @@ PERSONA JSON:
         Debug.Log($"[Emotion Debug] Text: \"{raw}\"");
         Debug.Log($"[Emotion Debug] Scores - Happy: {happy}, Sad: {sad}, Angry: {angry}, Surprised: {surprised}, Max: {max}");
         
+        // Lower threshold for happy, higher for others
         if (max <= 1) return "neutral";
+        
+        // Prefer happy emotion (happy wins on ties)
+        if (happy == max)
+        {
+            Debug.Log($"[Emotion Debug] Result: HAPPY (score: {happy})");
+            return "happy";
+        }
 
         if (angry == max)
         {
@@ -837,7 +896,6 @@ PERSONA JSON:
         }
         if (sad == max) return "sad";
         if (surprised == max) return "surprised";
-        if (happy == max) return "happy";
 
         return "neutral";
     }
@@ -845,8 +903,7 @@ PERSONA JSON:
     // Call this method when TTS (Piper) finishes playing all sentences
     public void OnTTSComplete()
     {
-        // Reset emotion back to neutral when TTS finishes
-        VTuberAnimationController.currentEmotion = "neutral";
+        // No need to reset emotion - it's now handled per sentence
         
         if (sttClient != null)
         {
@@ -975,7 +1032,7 @@ PERSONA JSON:
         // Use /api/generate with temperature 0 for clean, deterministic fact extraction
         var factRequest = new OllamaGenerateRequest
         {
-            model = model,
+            model = GetSelectedModelName(),
             prompt = prompt,
             stream = false,
             options = new OllamaOptions { temperature = 0f }

@@ -67,6 +67,7 @@ public class PiperClient : MonoBehaviour
     private readonly Queue<ClipWithSeq> readyToPlayQueue = new Queue<ClipWithSeq>();
     private readonly Dictionary<int, AudioClip> generatedClips = new Dictionary<int, AudioClip>();
     private readonly Dictionary<int, string> originalTextMap = new Dictionary<int, string>(); // Maps seq -> original text before cleaning
+    private readonly Dictionary<int, string> emotionMap = new Dictionary<int, string>(); // Maps seq -> emotion for this sentence
     
     private int activeGenerators = 0;
     private bool isPlaying = false;
@@ -130,7 +131,7 @@ public class PiperClient : MonoBehaviour
             return;
         }
 
-        Enqueue(sentence);
+        Enqueue(sentence, emotion);
     }
 
     [Serializable]
@@ -138,6 +139,7 @@ public class PiperClient : MonoBehaviour
     {
         public int seq;
         public string text;
+        public string emotion; // Emotion for this sentence
     }
 
     [Serializable]
@@ -151,43 +153,78 @@ public class PiperClient : MonoBehaviour
         public float length_scale; // Speech rate (1.0=normal, >1.0=slower, <1.0=faster)
     }
 
-    public void Enqueue(string text)
+    public void Enqueue(string text, string emotion = "neutral")
     {
-        Debug.Log($"[Piper] 📥 Enqueue called with text: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...' at time {Time.time}");
+        Debug.Log($"[Piper] 📥 Enqueue called with text: '{text?.Substring(0, Math.Min(50, text?.Length ?? 0))}...' emotion: {emotion} at time {Time.time}");
         
         if (string.IsNullOrWhiteSpace(text))
             return;
 
         text = text.Trim();
+        
+        // ALWAYS normalize location names to proper capitalization (from STTClient)
+        text = AutoVADSTTClient.NormalizeLocationForDetection(text);
+        
         if (text.Length < 2)
             return;
 
+        bool hasAnyContent = false;
+        bool hasAnySpeakableContent = false;
+        
         // Split long text into chunks
         foreach (var chunk in SplitText(text, maxChunkLength))
         {
             if (string.IsNullOrWhiteSpace(chunk) || chunk.Length < 2)
                 continue;
 
-            // Clean the chunk early to filter out action-only text
-            string cleanedChunk = CleanTextForTTS(chunk);
+            // Create chat version (with pink emotions) and TTS version (no emotions)
+			Debug.Log("=======" + chunk);
+            string chatVersion = PrepareForChat(chunk);
+            string ttsVersion = PrepareForTTS(chunk);
             
-            if (string.IsNullOrWhiteSpace(cleanedChunk) || cleanedChunk.Length < 2)
+            // If we have chat content (even if just actions), mark that we have content
+            if (!string.IsNullOrWhiteSpace(chatVersion) && chatVersion.Length >= 2)
             {
+                hasAnyContent = true;
+            }
+            
+            // If TTS is empty (only actions/emotions), display in chat but don't speak
+            if (string.IsNullOrWhiteSpace(ttsVersion) || ttsVersion.Length < 2)
+            {
+                // Still display the chat version if it has content
+                if (!string.IsNullOrWhiteSpace(chatVersion) && chatVersion.Length >= 2)
+                {
+                    AppendToChatHistory(chatVersion);
+                }
                 continue;
             }
 
+            hasAnySpeakableContent = true;
             int currentSeq = ++seqCounter;
             
-            // Store original chunk text before cleaning for chat history display
-            originalTextMap[currentSeq] = chunk;
+            // Store chat version for chat history display
+            originalTextMap[currentSeq] = chatVersion;
+            emotionMap[currentSeq] = emotion; // Store emotion for this sentence
 
             var item = new TTSItem
             {
                 seq = currentSeq,
-                text = cleanedChunk // Store the already cleaned text
+                text = ttsVersion, // Use TTS version without emotions
+                emotion = emotion
             };
 
             pendingGeneration.Enqueue(item);
+        }
+
+        // If we had content but nothing speakable (only actions), notify completion immediately
+        if (hasAnyContent && !hasAnySpeakableContent)
+        {
+            Debug.Log("[Piper] 💬 Only non-speakable content (actions/emotions) - completing immediately");
+            if (ollama != null)
+            {
+                ollama.OnTTSComplete();
+            }
+            return;
         }
 
         TryStartGenerators();
@@ -293,6 +330,18 @@ public class PiperClient : MonoBehaviour
                 AppendToChatHistory(originalText);
                 originalTextMap.Remove(clipData.seq); // Clean up to prevent memory leak
             }
+            
+            // Set emotion for this sentence
+            if (emotionMap.TryGetValue(clipData.seq, out string sentenceEmotion))
+            {
+                VTuberAnimationController.currentEmotion = sentenceEmotion;
+                Debug.Log($"[Piper] 🎭 Set emotion to: {sentenceEmotion} for seq {clipData.seq} at time {Time.time}");
+                emotionMap.Remove(clipData.seq); // Clean up
+            }
+            else
+            {
+                VTuberAnimationController.currentEmotion = "neutral";
+            }
 
             // Ensure AudioSource is in good state
             if (audioSource.isPlaying)
@@ -346,6 +395,10 @@ public class PiperClient : MonoBehaviour
             {
                 audioSource.Stop(); // Force stop on timeout
             }
+            
+            // Reset emotion to neutral after sentence completes
+            VTuberAnimationController.currentEmotion = "neutral";
+            Debug.Log($"[Piper] 😐 Reset emotion to neutral after sentence playback at time {Time.time}");
 
 			if (delayBetweenClips > 0f)
 			{
@@ -384,6 +437,9 @@ public class PiperClient : MonoBehaviour
     {
         if (chatHistoryText == null || string.IsNullOrWhiteSpace(text))
             return;
+
+        // Wrap location names with color
+        text = WrapLocationNamesWithColor(text);
 
         // Add speaker prefix
         string messageWithPrefix = speakerPrefix + " " + text;
@@ -441,6 +497,8 @@ public class PiperClient : MonoBehaviour
 
         Debug.Log("[PiperClient] AppendSystemMessage: Adding to chat UI");
         
+        // Don't wrap location names - system messages already have their own color formatting
+        
         // Append system message directly without any prefix or modification
         string currentText = chatHistoryText.text;
         if (string.IsNullOrEmpty(currentText))
@@ -463,16 +521,28 @@ public class PiperClient : MonoBehaviour
         }
     }
 
-    private string CleanTextForTTS(string text)
+    private string PrepareForChat(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return text;
         
-        // Remove action/emotion annotations between asterisks
-        string cleaned = Regex.Replace(text, @"\*[^*]*\*", "");
+        string cleaned = text.Trim();
         
-        // Also remove any remaining single asterisks
-        cleaned = cleaned.Replace("*", "");
+        // Remove only DOUBLE quotation marks (keep apostrophes for contractions like "you're")
+        cleaned = cleaned.Replace("\"", "");
+        cleaned = cleaned.Replace("\u201C", ""); // Left curly double quote
+        cleaned = cleaned.Replace("\u201D", ""); // Right curly double quote
+        
+        // Remove leading orphaned asterisk ONLY if it's not part of a valid emotion pattern (*word*)
+        // Valid: *giggles* Hello  (don't touch)
+        // Invalid: *I chuckle... (remove the leading *)
+        if (cleaned.StartsWith("*") && !Regex.IsMatch(cleaned, @"^\*[^*]+\*"))
+        {
+            cleaned = cleaned.Substring(1).Trim();
+        }
+        
+        // NOW wrap action/emotion annotations (including asterisks) with pink color for chat display
+        cleaned = Regex.Replace(cleaned, @"(\*[^*]+\*)", "<color=#FF69B4>$1</color>");
         
         // Clean up extra whitespace
         cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
@@ -484,6 +554,91 @@ public class PiperClient : MonoBehaviour
         }
         
         return cleaned;
+    }
+    
+    private string PrepareForTTS(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+        
+        string cleaned = text.Trim();
+        
+        // Remove only DOUBLE quotation marks (keep apostrophes for contractions)
+        cleaned = cleaned.Replace("\"", "");
+        cleaned = cleaned.Replace("\u201C", "");
+        cleaned = cleaned.Replace("\u201D", "");
+        
+        // Remove leading orphaned asterisk ONLY if it's not part of a valid emotion pattern
+        if (cleaned.StartsWith("*") && !Regex.IsMatch(cleaned, @"^\*[^*]+\*"))
+        {
+            cleaned = cleaned.Substring(1).Trim();
+        }
+        
+        // Remove action/emotion annotations between asterisks completely for TTS
+        cleaned = Regex.Replace(cleaned, @"\*[^*]+\*", "");
+        
+        // Also remove any remaining single asterisks
+        cleaned = cleaned.Replace("*", "");
+        
+        // Remove leading and trailing quotation marks (straight and curly quotes)
+        cleaned = cleaned.Trim();
+        cleaned = cleaned.Trim('"', '\u201C', '\u201D', '\'', '\u2018', '\u2019');
+        
+        // Clean up extra whitespace
+        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        
+        // Remove common leftover punctuation that might be alone
+        if (cleaned.Length <= 3 && Regex.IsMatch(cleaned, @"^[.,!?;:\s]*$"))
+        {
+            return "";
+        }
+        
+        return cleaned;
+    }
+
+    /// <summary>
+    /// Wraps all known location names in text with color tag for chat display
+    /// </summary>
+    private string WrapLocationNamesWithColor(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        // List of all location names to colorize (ordered by length to match longer names first)
+        string[] locationNames = new string[]
+        {
+            "Limsa Lominsa Upper Decks",
+            "Limsa Lominsa Lower Decks",
+            "Middle La Noscea",
+            "Central Shroud",
+            "Limsa Lominsa",
+            "Solution Nine",
+            "New Gridania",
+            "Old Gridania",
+            "Gold Saucer",
+            "Tuliyollal",
+            "La Noscea",
+            "Lakeland",
+            "Gridania",
+            "Yak'Tel",
+            "Il Mheg",
+            "Eulmore",
+            "Ul'dah",
+            "Kugane",
+            "Shroud",
+            "Mist"
+        };
+
+        string result = text;
+        foreach (string location in locationNames)
+        {
+            // Use word boundaries to avoid partial matches
+            string pattern = $@"\b{Regex.Escape(location)}\b";
+            string replacement = $"<color=#51db86>{location}</color>";
+            result = Regex.Replace(result, pattern, replacement, RegexOptions.IgnoreCase);
+        }
+
+        return result;
     }
 
     private async Task<byte[]> PostTTSAsync(string text)

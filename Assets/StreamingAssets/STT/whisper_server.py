@@ -32,6 +32,8 @@ async def stt(audio: UploadFile = File(...)):
     try:
         segments, info = model.transcribe(
             path,
+            language="en",
+   			task="transcribe",
 
             # IMPORTANT SPEED SETTINGS:
             beam_size=1,           # fastest decoding

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using DG.Tweening;
 
 public class AIBehaviorManager : MonoBehaviour
 {
@@ -18,6 +19,16 @@ public class AIBehaviorManager : MonoBehaviour
     
     [Tooltip("Path to background sprites in Resources folder (e.g., 'Backgrounds/')")]
     public string backgroundResourcesPath = "Backgrounds/";
+    
+    [Header("Location Transition")]
+    [Tooltip("UI elements to hide during transitions (chat log, chat background, etc.)")]
+    public GameObject[] uiElementsToHide;
+    
+    [Tooltip("UI Image for the full-screen title card")]
+    public Image titleScreenImage;
+    
+    [Tooltip("Path to title sprites in Resources folder (e.g., '4K/')")]
+    public string titleResourcesPath = "4K/";
     
     [Header("Location Display")]
     [Tooltip("TextMeshPro component to display the current location name")]
@@ -65,9 +76,10 @@ public class AIBehaviorManager : MonoBehaviour
     [Tooltip("Maximum seconds between behavior checks")]
     public float maxCheckInterval = 90f;
     
-    [Tooltip("Chance (0-1) that the AI will change location when a check occurs")]
+    [Header("Behavior Chances")]
+    [Tooltip("Chance that behavior will be a location change (vs talking behavior)")]
     [Range(0f, 1f)]
-    public float locationChangeChance = 0.3f;
+    public float locationChangeBehaviorChance = 0.05f; // 5% location change
     
     [Header("Debug")]
     public bool showDebugLogs = true;
@@ -83,6 +95,18 @@ public class AIBehaviorManager : MonoBehaviour
     {
         InitializeLocationDescriptions();
         InitializeLocationDisplayNames();
+        
+        // Initialize title screen (ON with alpha 0)
+        if (titleScreenImage != null)
+        {
+            titleScreenImage.gameObject.SetActive(true);
+            titleScreenImage.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+            Color col = titleScreenImage.color;
+            col.a = 0f;
+            titleScreenImage.color = col;
+            if (showDebugLogs)
+                Debug.Log("[AIBehavior] Title screen initialized (ON with alpha 0, scale 0.5)");
+        }
         
         // Always start at mist (home)
         currentLocation = "house_mist";
@@ -184,12 +208,25 @@ public class AIBehaviorManager : MonoBehaviour
             { "solution_nine", "Solution Nine" },
             { "tuliyollal", "Tuliyollal" },
             { "uldah", "Ul'dah - Steps of Nald" },
-            { "yaktel", "Yak T'el" }
+            { "yaktel", "Yak'Tel" }
         };
     }
     
     void Update()
     {
+        // Reset timer if there's any activity happening
+        if (sttClient != null && sttClient.IsSpeaking)
+        {
+            ResetBehaviorTimer();
+            return;
+        }
+        
+        if (piperClient != null && piperClient.IsBusy)
+        {
+            ResetBehaviorTimer();
+            return;
+        }
+        
         if (Time.time >= nextCheckTime)
         {
             TryPerformRandomAction();
@@ -206,6 +243,14 @@ public class AIBehaviorManager : MonoBehaviour
             Debug.Log($"[AIBehavior] Next check in {interval:F1} seconds");
     }
     
+    /// <summary>
+    /// Reset the behavior timer to minimum interval. Called when there's user activity.
+    /// </summary>
+    private void ResetBehaviorTimer()
+    {
+        nextCheckTime = Time.time + minCheckInterval;
+    }
+    
     private void TryPerformRandomAction()
     {
         // Check if we're allowed to perform an action
@@ -216,15 +261,22 @@ public class AIBehaviorManager : MonoBehaviour
             return;
         }
         
-        // Roll for location change
-        if (Random.value <= locationChangeChance)
+        // Roll for behavior type: 5% location change, 95% talking behavior
+        float roll = Random.value;
+        
+        if (roll <= locationChangeBehaviorChance)
         {
+            // 5% chance: Change location
+            if (showDebugLogs)
+                Debug.Log("[AIBehavior] Behavior: Location change");
             ChangeLocation();
         }
         else
         {
+            // 95% chance: Say something
             if (showDebugLogs)
-                Debug.Log("[AIBehavior] Skipping action this time");
+                Debug.Log("[AIBehavior] Behavior: Talking");
+            SaySomething();
         }
     }
     
@@ -243,6 +295,161 @@ public class AIBehaviorManager : MonoBehaviour
         }
         
         return true;
+    }
+    
+    /// <summary>
+    /// Make Kihbbi say something based on different scenarios
+    /// </summary>
+    private void SaySomething()
+    {
+        if (ollamaClient == null)
+        {
+            Debug.LogWarning("[AIBehavior] OllamaClient not assigned, cannot trigger talking behavior");
+            return;
+        }
+        
+        // For now: one behavior - check on Tashiro if he's quiet
+        // In the future, this can be expanded with different scenarios
+        
+        // Random choice of different talking behaviors
+        int behaviorChoice = Random.Range(0, 5); // 0-4: Five different behaviors
+        
+        switch (behaviorChoice)
+        {
+            case 0:
+                // Behavior: Wonder if Tashiro is alright since he's been quiet
+                CheckOnTashiro();
+                break;
+                
+            case 1:
+                // Behavior: Share a random fact about herself
+                ShareRandomFact();
+                break;
+                
+            case 2:
+                // Behavior: Share a random thought
+                ShareThought();
+                break;
+                
+            case 3:
+                // Behavior: Comment on the current environment/location
+                CommentOnEnvironment();
+                break;
+                
+            case 4:
+                // Behavior: Ask Tashiro a question
+                AskQuestion();
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// Kihbbi wonders if Tashiro is alright and checks on him
+    /// </summary>
+    private void CheckOnTashiro()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] CheckOnTashiro: Prompting AI to check on Tashiro");
+        
+        // Add a contextual prompt that makes Kihbbi check on Tashiro
+        // The AI will naturally respond with something like "Hey Tashiro, are you alright? You've been quiet."
+        string contextMessage = "*Kihbbi notices that Tashiro has been quiet for a while and wonders if he is alright*";
+        
+        // Send the context as a user message and generate AI response
+        ollamaClient.Ask(contextMessage);
+    }
+    
+    /// <summary>
+    /// Kihbbi shares a random fact about herself
+    /// </summary>
+    private void ShareRandomFact()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] ShareRandomFact: Prompting AI to share a fact");
+        
+        // Add a contextual prompt that makes Kihbbi share something about herself
+        // The AI will naturally share a fact, preference, or story about herself
+        string[] factPrompts = new string[]
+        {
+            "*Kihbbi thinks of something interesting about herself and decides to share it with Tashiro*",
+            "*Kihbbi remembers something fun or interesting and wants to tell Tashiro about it*",
+            "*Kihbbi feels like sharing a random fact about herself with Tashiro*",
+            "*Kihbbi wants to tell Tashiro something about her interests or hobbies*"
+        };
+        
+        string contextMessage = factPrompts[Random.Range(0, factPrompts.Length)];
+        
+        // Send the context as a user message and generate AI response
+        ollamaClient.Ask(contextMessage);
+    }
+    
+    /// <summary>
+    /// Kihbbi shares a random thought that's on her mind
+    /// </summary>
+    private void ShareThought()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] ShareThought: Prompting AI to share a thought");
+        
+        // Add a contextual prompt that makes Kihbbi share what's on her mind
+        string[] thoughtPrompts = new string[]
+        {
+            "*Kihbbi has been thinking about something and wants to share her thoughts with Tashiro*",
+            "*Something crosses Kihbbi's mind and she decides to voice it out loud*",
+            "*Kihbbi has a random thought and feels like sharing it*",
+            "*Kihbbi wonders about something and decides to share her musings with Tashiro*"
+        };
+        
+        string contextMessage = thoughtPrompts[Random.Range(0, thoughtPrompts.Length)];
+        
+        // Send the context as a user message and generate AI response
+        ollamaClient.Ask(contextMessage);
+    }
+    
+    /// <summary>
+    /// Kihbbi comments on the current environment or location
+    /// </summary>
+    private void CommentOnEnvironment()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] CommentOnEnvironment: Prompting AI to comment on surroundings");
+        
+        // Add a contextual prompt that makes Kihbbi comment on where they are
+        string[] environmentPrompts = new string[]
+        {
+            "*Kihbbi looks around at the surroundings and makes a comment about the location*",
+            "*Kihbbi notices something interesting about the current area and points it out*",
+            "*Kihbbi takes in the atmosphere of the place and shares her thoughts about it*",
+            "*Kihbbi observes the environment around her and mentions something she finds noteworthy*"
+        };
+        
+        string contextMessage = environmentPrompts[Random.Range(0, environmentPrompts.Length)];
+        
+        // Send the context as a user message and generate AI response
+        ollamaClient.Ask(contextMessage);
+    }
+    
+    /// <summary>
+    /// Kihbbi asks Tashiro a random question
+    /// </summary>
+    private void AskQuestion()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] AskQuestion: Prompting AI to ask a question");
+        
+        // Add a contextual prompt that makes Kihbbi ask Tashiro something
+        string[] questionPrompts = new string[]
+        {
+            "*Kihbbi feels curious and a question forms in her mind*",
+            "*Something makes Kihbbi wonder about Tashiro*",
+            "*Kihbbi's curiosity is piqued and she thinks of something to ask*",
+            "*A question about Tashiro crosses Kihbbi's mind*"
+        };
+        
+        string contextMessage = questionPrompts[Random.Range(0, questionPrompts.Length)];
+        
+        // Send the context as a user message and generate AI response
+        ollamaClient.Ask(contextMessage);
     }
     
     private void ChangeLocation()
@@ -272,8 +479,8 @@ public class AIBehaviorManager : MonoBehaviour
         if (showDebugLogs)
             Debug.Log($"[AIBehavior] Changing location to: {currentLocation}");
         
-        // Update background
-        UpdateBackground();
+        // Start transition coroutine instead of directly updating
+        StartCoroutine(LocationTransitionSequence());
         
         // Update AI's location context
         UpdateLocationContext();
@@ -319,12 +526,16 @@ public class AIBehaviorManager : MonoBehaviour
             return;
         }
         
+        // Reset behavior timer since user commanded a location change
+        ResetBehaviorTimer();
+        
         currentLocation = locationKey;
         
         if (showDebugLogs)
             Debug.Log($"[AIBehavior] Changing to location: {currentLocation}");
         
-        UpdateBackground();
+        // Start transition coroutine instead of directly updating
+        StartCoroutine(LocationTransitionSequence());
         UpdateLocationContext();
         UpdateLocationDisplay();
         
@@ -369,6 +580,9 @@ public class AIBehaviorManager : MonoBehaviour
             return;
         }
         
+        // Reset behavior timer since user commanded a location change
+        ResetBehaviorTimer();
+        
         // Pick any random location (can be same as current)
         string newLocation = locations[Random.Range(0, locations.Length)];
         currentLocation = newLocation;
@@ -376,7 +590,8 @@ public class AIBehaviorManager : MonoBehaviour
         if (showDebugLogs)
             Debug.Log($"[AIBehavior] Random location change to: {currentLocation}");
         
-        UpdateBackground();
+        // Start transition coroutine instead of directly updating
+        StartCoroutine(LocationTransitionSequence());
         UpdateLocationContext();
         UpdateLocationDisplay();
         
@@ -411,6 +626,129 @@ public class AIBehaviorManager : MonoBehaviour
                 ollamaClient.AddAssistantMessageToHistory(response);
             }
         }
+    }
+    
+    private IEnumerator LocationTransitionSequence()
+    {
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] Starting location transition sequence");
+        
+        // Step 1: Hide all UI elements immediately
+        if (uiElementsToHide != null)
+        {
+            foreach (GameObject uiElement in uiElementsToHide)
+            {
+                if (uiElement != null)
+                {
+                    uiElement.SetActive(false);
+                    if (showDebugLogs)
+                        Debug.Log($"[AIBehavior] Hidden UI element: {uiElement.name}");
+                }
+            }
+        }
+        
+        // Step 2: Load title sprite and fade in
+        if (titleScreenImage != null)
+        {
+            string titleName = currentLocation + "_title";
+            Sprite titleSprite = Resources.Load<Sprite>(titleResourcesPath + titleName);
+            
+            if (titleSprite != null)
+            {
+                // Activate the title screen GameObject
+                titleScreenImage.gameObject.SetActive(true);
+                
+                // Swap the sprite resource on the UI Image
+                titleScreenImage.sprite = titleSprite;
+                
+                // Reset scale to 0.5 at the beginning
+                titleScreenImage.transform.localScale = new Vector3(0.5f, 0.5f, 1f);
+                
+                // Ensure alpha is 0
+                Color col = titleScreenImage.color;
+                col.a = 0f;
+                titleScreenImage.color = col;
+                
+                if (showDebugLogs)
+                    Debug.Log($"[AIBehavior] Loaded title UI Image: {titleResourcesPath}{titleName}");
+                
+                // Start slow scale animation from 0.5 to 0.53 over entire transition (3.5s total)
+                titleScreenImage.transform.DOScale(new Vector3(0.53f, 0.53f, 1f), 3.5f).SetEase(Ease.Linear);
+                
+                // Step 3: Fade in alpha over 1s
+                col.a = 1f;
+                titleScreenImage.DOColor(col, 1f).SetEase(Ease.InOutSine);
+                yield return new WaitForSeconds(1f);
+                
+                if (showDebugLogs)
+                    Debug.Log("[AIBehavior] Title fade-in complete");
+                
+                // Step 4: At the middle (1s mark), change background
+                UpdateBackground();
+                
+                if (showDebugLogs)
+                    Debug.Log("[AIBehavior] Background updated mid-transition");
+                
+                // Step 5: Hold at full opacity for 1.5s
+                yield return new WaitForSeconds(1.5f);
+                
+                // Step 6: Show all UI elements before fade out
+                if (uiElementsToHide != null)
+                {
+                    foreach (GameObject uiElement in uiElementsToHide)
+                    {
+                        if (uiElement != null)
+                        {
+                            uiElement.SetActive(true);
+                            if (showDebugLogs)
+                                Debug.Log($"[AIBehavior] Shown UI element: {uiElement.name}");
+                        }
+                    }
+                }
+                
+                // Step 7: Fade out alpha over 1.5s
+                col.a = 0f;
+                titleScreenImage.DOColor(col, 1f).SetEase(Ease.InOutSine);
+                yield return new WaitForSeconds(1f);
+                
+                // keep the title screen GameObject active at all time
+                titleScreenImage.gameObject.SetActive(true);
+                
+                if (showDebugLogs)
+                    Debug.Log("[AIBehavior] Title fade-out complete");
+            }
+            else
+            {
+                Debug.LogWarning($"[AIBehavior] Title sprite not found: {titleResourcesPath}{titleName}");
+                // Fallback: just update background and show UI elements
+                UpdateBackground();
+                if (uiElementsToHide != null)
+                {
+                    foreach (GameObject uiElement in uiElementsToHide)
+                    {
+                        if (uiElement != null)
+                            uiElement.SetActive(true);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[AIBehavior] Title screen UI Image not assigned - skipping transition");
+            // Fallback: just update background and show UI elements
+            UpdateBackground();
+            if (uiElementsToHide != null)
+            {
+                foreach (GameObject uiElement in uiElementsToHide)
+                {
+                    if (uiElement != null)
+                        uiElement.SetActive(true);
+                }
+            }
+        }
+        
+        if (showDebugLogs)
+            Debug.Log("[AIBehavior] Location transition sequence complete");
     }
     
     private void UpdateBackground()

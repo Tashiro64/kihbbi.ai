@@ -16,7 +16,7 @@ public class AutoVADSTTClient : MonoBehaviour
     public string sttUrl = "http://127.0.0.1:8007/stt";
 
     [Header("Command Intercept")]
-    public string commandPrefix = "hey kihbbi";
+    public string commandPrefix = "hey Kihbbi";
     public string commandWebhookUrl = "https://tashiroworld.com/api/kihbbi.ai/ffxivcollect.php";
     [Tooltip("Phonetic variations of 'kihbbi' that Whisper might transcribe")]
     public string[] kihbbiVariations = new string[] 
@@ -357,26 +357,26 @@ public class AutoVADSTTClient : MonoBehaviour
                 Debug.Log($"[AutoVAD] Before command prefix fixes: '{normalizedText}'");
 			
 			// Fix common STT errors for "hey kihbbi" command prefix - use word boundaries for better matching
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA key B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bEi que bi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Ki B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Ki B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAy kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA KB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAQB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAKB\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\.kihbbi\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Qui B\b", "hey kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA key B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA kihbbi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bEi que bi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Ki B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Ki B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. kihbbi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. kihbbi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAy kihbbi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA KB\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAQB\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bAKB\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA qui B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\.kihbbi\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA. Qui B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+			normalizedText = System.Text.RegularExpressions.Regex.Replace(normalizedText, @"\bA\. Qui B\b", "hey Kihbbi", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 			
 			normalizedText = normalizedText.Replace(",", "");
 			
-			// Normalize location names for better display in chat log
-			normalizedText = NormalizeLocationNames(normalizedText);
+			// ALWAYS normalize location names to proper capitalization for display
+			normalizedText = NormalizeLocationForDetection(normalizedText);
 			
 			if (showDebugLogs)
                 Debug.Log($"[AutoVAD] After all normalizations: '{normalizedText}'");
@@ -423,41 +423,50 @@ public class AutoVADSTTClient : MonoBehaviour
                     
                     if (aiBehaviorManager != null)
                     {
-                        // Use the already lowercased normLower for location detection
-                        // (normalizedText already has location names properly capitalized)
-                        string locationLower = normLower;
+                        // Location names are already normalized in normalizedText
+                        if (showDebugLogs) 
+                            Debug.Log($"[AutoVAD] Checking for location in: '{normalizedText}'");
                         
-                        // Try to find a specific location in the text
+                        // Check for specific locations (case-insensitive detection)
                         string foundLocation = null;
+                        string checkLower = normalizedText.ToLower();
                         
-                        if (locationLower.Contains("home") || locationLower.Contains("house"))
+                        if (checkLower.Contains("home") || checkLower.Contains("house"))
                             foundLocation = "house_mist";
-                        else if (locationLower.Contains("kugane"))
-                            foundLocation = "kugane";
-                        else if (locationLower.Contains("limsa"))
-                            foundLocation = "limsa_lominsa";
-                        else if (locationLower.Contains("gridania"))
-                            foundLocation = "new_gridania";
-                        else if (locationLower.Contains("uldah"))
-                            foundLocation = "uldah";
-                        else if (locationLower.Contains("gold saucer") || locationLower.Contains("saucer"))
-                            foundLocation = "gold_saucer";
-                        else if (locationLower.Contains("eulmore"))
-                            foundLocation = "eulmore";
-                        else if (locationLower.Contains("solution nine"))
-                            foundLocation = "solution_nine";
-                        else if (locationLower.Contains("tuliyollal"))
-                            foundLocation = "tuliyollal";
-                        else if (locationLower.Contains("il mheg"))
-                            foundLocation = "il_mheg";
-                        else if (locationLower.Contains("lakeland"))
-                            foundLocation = "lakeland";
-                        else if (locationLower.Contains("shroud"))
-                            foundLocation = "central_shroud";
-                        else if (locationLower.Contains("la noscea"))
-                            foundLocation = "middle_la_noscea";
-                        else if (locationLower.Contains("yaktel"))
+                        else if (checkLower.Contains("yak'tel") || checkLower.Contains("yaktel"))
                             foundLocation = "yaktel";
+                        else if (checkLower.Contains("limsa") || checkLower.Contains("lominsa"))
+                            foundLocation = "limsa_lominsa";
+                        else if (checkLower.Contains("gridania"))
+                            if(checkLower.Contains("new"))
+                                foundLocation = "new_gridania";
+                            else if(checkLower.Contains("old"))
+								foundLocation = "old_gridania";
+							else
+                                foundLocation = "new_gridania";
+                        else if (checkLower.Contains("ul'dah") || checkLower.Contains("uldah"))
+                            foundLocation = "uldah";
+                        else if (checkLower.Contains("gold saucer"))
+                            foundLocation = "gold_saucer";
+                        else if (checkLower.Contains("solution nine") || checkLower.Contains("solution 9"))
+                            foundLocation = "solution_nine";
+                        else if (checkLower.Contains("il mheg"))
+                            foundLocation = "il_mheg";
+                        else if (checkLower.Contains("la noscea"))
+                            foundLocation = "middle_la_noscea";
+                        else if (checkLower.Contains("kugane"))
+                            foundLocation = "kugane";
+                        else if (checkLower.Contains("eulmore"))
+                            foundLocation = "eulmore";
+                        else if (checkLower.Contains("tuliyollal"))
+                            foundLocation = "tuliyollal";
+                        else if (checkLower.Contains("lakeland"))
+                            foundLocation = "lakeland";
+                        else if (checkLower.Contains("shroud"))
+                            foundLocation = "central_shroud";
+                        
+                        if (showDebugLogs)
+                            Debug.Log($"[AutoVAD] Location detection result: foundLocation = {(foundLocation ?? "NULL")}");
                         
                         if (foundLocation != null)
                         {
@@ -546,53 +555,93 @@ public class AutoVADSTTClient : MonoBehaviour
     }
     
     /// <summary>
-    /// Normalize phonetic variations of location names for better recognition
+    /// Normalize location variations to REAL capitalized display names.
+    /// All variations get converted to the proper official location names.
     /// </summary>
-    public string NormalizeLocationNames(string text)
+    public static string NormalizeLocationForDetection(string text)
     {
         string normalized = text;
         
-        // Kugane variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(kugeni|koogane|kugan|koogan|kugani|coogane|cugane)\b", "Kugane", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Yak'Tel variations → "Yak'Tel"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"yak\s*[''']?\s*t[eé]l", "Yak'Tel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"yak\s+tel", "Yak'Tel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\byaktel\b", "Yak'Tel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bYachtel\b", "Yak'Tel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Limsa variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(limza|lemsa|limsa|leemsa|limza lominsa|lemsa lominsa)\b", "Limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Limsa Lominsa variations → "Limsa Lominsa"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"limsa\s+lominsa", "Limsa Lominsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"limza\s+lominsa", "Limsa Lominsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"lemsa\s+lominsa", "Limsa Lominsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\blimsa\b", "Limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\blimza\b", "Limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\blemsa\b", "Limsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Lominsa variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lominsa|lominza|lomin za)\b", "Lominsa", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // New Gridania variations → "Gridania"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"new\s+gridania", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bgredania\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bgridania\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bGris Daniel\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bGrisdagne\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bGris dagne\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Gridania variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gredania|gridanya|greedania|gredanya)\b", "Gridania", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Ul'dah variations → "Ul'dah"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"ul\s*[''']?\s*dah", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\buldah\b", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bUl-da\b", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bOlda\b", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Ul'dah variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(uldah|ooldah|ul da|ool dah|ulda)\b", "Ul'dah", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Gold Saucer variations → "Gold Saucer"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"golden\s+saucer", "Gold Saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"gold\s+saucer", "Gold Saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bsaucer\b", "Saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Eulmore variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(old moor|eulmore|yule more|ule more|eelmore)\b", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Solution Nine variations → "Solution Nine"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"solution\s+9", "Solution Nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"solution\s+nine", "Solution Nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"sulution\s+nine", "Solution Nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Tuliyollal variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(tuliyollal|tuli yollal|tulli yollal|tulia lal|toolie lal)\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Il Mheg variations → "Il Mheg"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"ill?\s+m[he]g", "Il Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"eel\s+m[he]g", "Il Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bmheg\b", "Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bIlmeg\b", "Il Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Il Mheg variations (already handled but adding more)
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(ill meg|il meg|ill mheg|eel meg|eel mheg)\b", "Il Mheg", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // La Noscea variations → "La Noscea"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"la\s+no\s+sea", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"la\s+noshea", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"la\s+noscea", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bnoscea\b", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bMidor\b", "Middle", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bMedall\b", "Middle", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bNocea\b", "Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bmiddle la\b", "Middle La", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bla Noscea\b", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Lakeland variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lakeland|lake land|lakelend)\b", "Lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Tuliyollal variations → "Tuliyollal"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"tuli\s+yollal", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"tulli\s+yollal", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\btuliyollal\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bTully Yorlal\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bTully Yolal\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bTulliolal\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\bTuliolal\b", "Tuliyollal", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Solution Nine variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(solution 9|solution nine|solution nine|sulution nine)\b", "Solution Nine", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Kugane variations → "Kugane"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(kugeni|koogane|kugan|coogane|cugane|kugane)\b", "Kugane", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Gold Saucer variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(gold saucer|gold sauce er|golden saucer)\b", "Gold Saucer", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Eulmore variations → "Eulmore"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"old\s+moor", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"yule\s+more", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"ule\s+more", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(eelmore|eulmore)\b", "Eulmore", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // Shroud variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(shrood|shroud|shrowd|shrod)\b", "Shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Central Shroud variations → "Shroud"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"central\s+shroud", "Shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(shrood|shrowd|shroud)\b", "Shroud", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
-        // La Noscea variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(la noscea|la no sea|la noshea|la nos sea)\b", "La Noscea", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        
-        // Yak T'el variations
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(yaktel|yak tel|yak tell|yakk tel)\b", "Yaktel", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // Lakeland variations → "Lakeland"
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"lake\s+land", "Lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\b(lakelend|lakeland)\b", "Lakeland", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         
         return normalized;
     }
